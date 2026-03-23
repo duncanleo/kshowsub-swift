@@ -1,5 +1,5 @@
 {
-  "originHash" : "04c8774da3988224d450165693f1a853e325495d029bcade4a430d2b52ce51c6",
+  "originHash" : "2cbf5f387f64da44cf70d232e59a62e4217adf4a19ae08c44abd73dea2eeab3f",
   "pins" : [
     {
       "identity" : "swift-argument-parser",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "626b5b7b2f45e1b0b1c6f4a309296d1d21d7311b",
         "version" : "1.7.1"
+      }
+    },
+    {
+      "identity" : "swift-subtitle-kit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/dioKaratzas/swift-subtitle-kit.git",
+      "state" : {
+        "revision" : "0ae386087935efdf6b8c03b65a447f2ed27d4f90",
+        "version" : "1.0.3"
       }
     }
   ],
