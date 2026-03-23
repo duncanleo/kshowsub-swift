@@ -11,7 +11,7 @@ struct KShowSubCLI: AsyncParsableCommand {
         abstract:
             "Generate ASS subtitles from video using Speech (dialogue) and Vision OCR (on-screen text).",
         discussion:
-            "Runs speech recognition and OCR in parallel, then merges both into a single ASS file with dialogue at the bottom and OCR text at the top."
+            "Runs speech recognition and OCR in parallel, then merges both into a single ASS file with dialogue at the bottom and OCR text at the top. Optional translation to a target locale."
     )
 
     @Option(name: .shortAndLong, help: "Input video file path")
@@ -49,6 +49,28 @@ struct KShowSubCLI: AsyncParsableCommand {
         help: "Reuse resumable intermediate artifacts when available."
     )
     var resume: Bool = true
+
+    @Flag(name: .shortAndLong, help: "Translate subtitles to target locale")
+    var translate: Bool = false
+
+    @Option(name: .long, help: "Target locale for translation (e.g. en-US)")
+    var targetLocale: String = "en-US"
+
+    @Option(
+        name: .long,
+        help:
+            "Translation provider: \(TranslationProviderRegistry.availableIDs.joined(separator: ", "))"
+    )
+    var translateProvider: String = "apple-intelligence"
+
+    mutating func validate() throws {
+        try TranslationProviderRegistry.validateProviderID(translateProvider)
+        if translate {
+            let providerOptions: [String: String] = [:]
+            try TranslationProviderRegistry.validateProviderConfiguration(
+                id: translateProvider, options: providerOptions)
+        }
+    }
 
     func run() async throws {
         let inputURL = URL(fileURLWithPath: input)
@@ -102,6 +124,20 @@ struct KShowSubCLI: AsyncParsableCommand {
             dialogue: mergedDialogue,
             ocr: ocr
         )
+
+        if translate {
+            let target = Locale(identifier: targetLocale)
+            let providerOptions: [String: String] = [:]
+            let provider = try TranslationProviderRegistry.resolveOrThrow(
+                id: translateProvider,
+                sourceLocale: resolvedLocale,
+                targetLocale: target,
+                options: providerOptions
+            )
+            let translator = SubtitleTranslator(provider: provider)
+            print("Translating \(allCues.count) cues to \(targetLocale) (\(provider.id))...")
+            allCues = try await translator.translate(allCues)
+        }
 
         let subtitle = ASSMerger.merge(cues: allCues)
 
