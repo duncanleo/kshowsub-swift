@@ -1,0 +1,220 @@
+import AVFoundation
+import ArgumentParser
+import Foundation
+import KShowSubCore
+import SubtitleKit
+
+@main
+struct KShowSubCLI: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: ProcessInfo.processInfo.processName,
+        abstract:
+            "Generate ASS subtitles from video using Speech (dialogue) and Vision OCR (on-screen text).",
+        discussion:
+            "Runs speech recognition and OCR in parallel, then merges both into a single ASS file with dialogue at the bottom and OCR text at the top."
+    )
+
+    @Option(name: .shortAndLong, help: "Input video file path")
+    var input: String
+
+    @Option(name: .shortAndLong, help: "Output ASS file path")
+    var output: String
+
+    @Option(name: .shortAndLong, help: "Locale for speech recognition (e.g. en-US, ko-KR, ja-JP)")
+    var locale: String
+
+    @Option(
+        name: .long,
+        help:
+            "OCR sampling rate: frames per second to sample from the video for on-screen text (1–120)."
+    )
+    var ocrFPS: Int = 3
+
+    @Option(
+        name: .long,
+        help:
+            "OCR tuning preset: \(OCRProfile.allNamed.map(\.name).joined(separator: ", ")). Controls region filtering, similarity thresholds, and text-size limits."
+    )
+    var ocrProfile: String = "default"
+
+    @Option(
+        name: .long,
+        help: "Directory for resumable intermediate artifacts. Defaults to Application Support."
+    )
+    var workDir: String?
+
+    @Flag(
+        name: .long,
+        inversion: .prefixedNo,
+        help: "Reuse resumable intermediate artifacts when available."
+    )
+    var resume: Bool = true
+
+    func run() async throws {
+        let inputURL = URL(fileURLWithPath: input)
+        let outputURL = URL(fileURLWithPath: output)
+
+        guard FileManager.default.fileExists(atPath: inputURL.path) else {
+            throw ValidationError("Input file does not exist: \(input)")
+        }
+        guard (1...120).contains(ocrFPS) else {
+            throw ValidationError("--ocr-fps must be between 1 and 120, got \(ocrFPS)")
+        }
+
+        let resolvedLocale = Locale(identifier: locale)
+        let transcriber = VideoSpeechTranscriber(locale: resolvedLocale)
+        let ocrProcessor = OCRProcessor()
+        let store = try JobStore(
+            inputURL: inputURL, workDirOverride: workDir, resumeEnabled: resume)
+        try await store.prepareWorkspace()
+        print("Workspace: \(await store.workspacePath())")
+
+        let resolvedProfile = OCRProfile.named(ocrProfile)!
+        let speechKey = Self.stageKey(parts: ["speech", resolvedLocale.identifier])
+        let ocrFramesKey = Self.stageKey(parts: ["ocr", resolvedLocale.identifier, String(ocrFPS)])
+        let ocrKey = Self.stageKey(parts: [
+            "ocr", resolvedLocale.identifier, String(ocrFPS), ocrProfile,
+        ])
+
+        async let dialogueCues: [SubtitleCue] = loadOrCreateSpeechCues(
+            store: store,
+            key: speechKey,
+            inputURL: inputURL,
+            transcriber: transcriber
+        )
+        async let ocrCues: [SubtitleCue] = loadOrCreateOCRCues(
+            store: store,
+            key: ocrKey,
+            framesKey: ocrFramesKey,
+            inputURL: inputURL,
+            locale: resolvedLocale,
+            fps: ocrFPS,
+            profile: resolvedProfile,
+            processor: ocrProcessor
+        )
+
+        let (dialogue, ocr) = try await (dialogueCues, ocrCues)
+        let mergedDialogue = SpeechCueMerger(locale: resolvedLocale).merge(dialogue)
+        let mergeKey = Self.stageKey(parts: ["merge", speechKey, ocrKey, resolvedLocale.identifier])
+        var allCues = try await loadOrCreateMergedCues(
+            store: store,
+            key: mergeKey,
+            dialogue: mergedDialogue,
+            ocr: ocr
+        )
+
+        let subtitle = ASSMerger.merge(cues: allCues)
+
+        try await subtitle.save(to: outputURL, format: .ass, lineEnding: .lf)
+        try Self.injectPlayRes(into: outputURL)
+        print("Wrote \(subtitle.cues.count) cues to \(outputURL.path)")
+    }
+
+    private func loadOrCreateSpeechCues(
+        store: JobStore,
+        key: String,
+        inputURL: URL,
+        transcriber: VideoSpeechTranscriber
+    ) async throws -> [SubtitleCue] {
+        if await store.canReuse(stage: .speech, key: key),
+            let cached = try await store.loadCues(stage: .speech)
+        {
+            print("Speech: reusing cached cues.")
+            return cached
+        }
+
+        try await store.markStageRunning(.speech, key: key)
+        do {
+            let cues = try await transcriber.transcribe(videoURL: inputURL)
+            try await store.saveCues(
+                cues, stage: .speech, key: key, artifactName: StageArtifacts.speechCues)
+            return cues
+        } catch {
+            try? await store.markStageFailed(.speech, key: key, error: error)
+            throw error
+        }
+    }
+
+    private func loadOrCreateOCRCues(
+        store: JobStore,
+        key: String,
+        framesKey: String,
+        inputURL: URL,
+        locale: Locale,
+        fps: Int,
+        profile: OCRProfile,
+        processor: OCRProcessor
+    ) async throws -> [SubtitleCue] {
+        let existingRecords = try await store.loadOCRFrameRecords(framesKey: framesKey)
+        let totalFrameCount = try await Self.ocrFrameCount(videoURL: inputURL, fps: fps)
+        let resetArtifacts =
+            existingRecords.isEmpty ? [StageArtifacts.ocrFrames, StageArtifacts.ocrCues] : []
+        try await store.markStageRunning(
+            .ocr,
+            key: key,
+            metadata: [
+                "framesKey": framesKey,
+                "frameCount": String(totalFrameCount),
+                "completedFrameCount": String(existingRecords.count),
+            ],
+            resetArtifacts: resetArtifacts
+        )
+
+        do {
+            let cues = try await processor.extractText(
+                videoURL: inputURL,
+                locale: locale,
+                fps: fps,
+                profile: profile,
+                existingFrameRecords: existingRecords,
+                persistRecords: { records in
+                    try await store.appendOCRFrameRecords(
+                        records, stageKey: key, framesKey: framesKey,
+                        totalFrameCount: totalFrameCount)
+                }
+            )
+            try await store.saveCues(
+                cues, stage: .ocr, key: key, artifactName: StageArtifacts.ocrCues)
+            return cues
+        } catch {
+            try? await store.markStageFailed(.ocr, key: key, error: error)
+            throw error
+        }
+    }
+
+    private func loadOrCreateMergedCues(
+        store: JobStore,
+        key: String,
+        dialogue: [SubtitleCue],
+        ocr: [SubtitleCue]
+    ) async throws -> [SubtitleCue] {
+        try await store.markStageRunning(.merge, key: key)
+        let merged = (dialogue + ocr).sorted { $0.startTime < $1.startTime }
+        try await store.saveCues(
+            merged, stage: .merge, key: key, artifactName: StageArtifacts.mergedCues)
+        return merged
+    }
+
+    private static func ocrFrameCount(videoURL: URL, fps: Int) async throws -> Int {
+        let asset = AVURLAsset(url: videoURL)
+        let duration = try await asset.load(.duration)
+        let totalSeconds = CMTimeGetSeconds(duration)
+        return max(1, Int(ceil(totalSeconds * Double(fps))))
+    }
+
+    private static func stageKey(parts: [String]) -> String {
+        JobStore.hashString(parts.joined(separator: "|"))
+    }
+
+    /// Injects PlayResX/PlayResY into [Script Info] so alignment and MarginV render correctly.
+    /// Without these, players default to 384x288 which breaks top/bottom positioning.
+    private static func injectPlayRes(into url: URL) throws {
+        var content = try String(contentsOf: url, encoding: .utf8)
+        guard !content.contains("PlayResX:") else { return }
+        let playResHeaders = "\nPlayResX: 1920\nPlayResY: 1080\n"
+        if let scriptTypeRange = content.range(of: "ScriptType: v4.00+") {
+            content.insert(contentsOf: playResHeaders, at: scriptTypeRange.upperBound)
+            try content.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+}
