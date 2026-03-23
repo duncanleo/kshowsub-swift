@@ -63,10 +63,34 @@ struct KShowSubCLI: AsyncParsableCommand {
     )
     var translateProvider: String = "apple-intelligence"
 
+    @Option(
+        name: [.customLong("openai-model")],
+        help:
+            "Model for the openai-batch provider (default: gpt-5-nano, overrides OPENAI_MODEL). Uses direct chat completions requests."
+    )
+    var openAIModel: String?
+
+    @Option(
+        name: [.customLong("openai-base-url")],
+        help:
+            "Base URL for the openai-batch provider (overrides OPENAI_BASE_URL). For OpenAI-compatible gateways (e.g. Gemini’s /v1beta/openai), set this to that root; /v1/chat/completions is appended."
+    )
+    var openAIBaseURL: String?
+
+    @Option(
+        name: [.customLong("openai-auth")],
+        help:
+            "How to send the API key: bearer (Authorization: Bearer, default) or x-api-key (x-api-key header). Overrides OPENAI_AUTH."
+    )
+    var openAIAuth: String?
+
     mutating func validate() throws {
         try TranslationProviderRegistry.validateProviderID(translateProvider)
         if translate {
-            let providerOptions: [String: String] = [:]
+            var providerOptions: [String: String] = [:]
+            if let m = openAIModel { providerOptions["openai-model"] = m }
+            if let u = openAIBaseURL { providerOptions["openai-base-url"] = u }
+            if let a = openAIAuth { providerOptions["openai-auth"] = a }
             try TranslationProviderRegistry.validateProviderConfiguration(
                 id: translateProvider, options: providerOptions)
         }
@@ -127,7 +151,10 @@ struct KShowSubCLI: AsyncParsableCommand {
 
         if translate {
             let target = Locale(identifier: targetLocale)
-            let providerOptions: [String: String] = [:]
+            var providerOptions: [String: String] = [:]
+            if let m = openAIModel { providerOptions["openai-model"] = m }
+            if let u = openAIBaseURL { providerOptions["openai-base-url"] = u }
+            if let a = openAIAuth { providerOptions["openai-auth"] = a }
             let provider = try TranslationProviderRegistry.resolveOrThrow(
                 id: translateProvider,
                 sourceLocale: resolvedLocale,

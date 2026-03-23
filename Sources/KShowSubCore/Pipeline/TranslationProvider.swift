@@ -59,6 +59,15 @@ public enum TranslationProviderRegistry {
         AppleIntelligenceTranslationProvider.id: { src, tgt, _ in
             try AppleIntelligenceTranslationProvider(sourceLocale: src, targetLocale: tgt)
         },
+        OpenAIBatchTranslationProvider.id: { src, tgt, opts in
+            try OpenAIBatchTranslationProvider(
+                sourceLocale: src,
+                targetLocale: tgt,
+                model: opts["openai-model"],
+                baseURL: opts["openai-base-url"].flatMap(URL.init(string:)),
+                authMode: opts["openai-auth"]
+            )
+        },
     ]
 
     /// All registered provider IDs.
@@ -71,12 +80,14 @@ public enum TranslationProviderRegistry {
         }
     }
 
-    /// Validates provider-specific configuration (e.g. Apple Intelligence availability).
+    /// Validates provider-specific configuration (API keys, auth mode, Apple Intelligence availability, etc.).
     public static func validateProviderConfiguration(id: String, options: [String: String] = [:]) throws {
         try validateProviderID(id)
         switch id {
         case AppleIntelligenceTranslationProvider.id:
             try AppleIntelligenceTranslationProvider.validateTranslationConfiguration(options: options)
+        case OpenAIBatchTranslationProvider.id:
+            try OpenAIBatchTranslationProvider.validateTranslationConfiguration(options: options)
         default:
             break
         }
