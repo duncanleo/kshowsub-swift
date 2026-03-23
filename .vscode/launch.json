@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:kshowsub-swift}",
+            "name": "Debug KShowSub",
+            "target": "KShowSub",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug KShowSub"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:kshowsub-swift}",
+            "name": "Release KShowSub",
+            "target": "KShowSub",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release KShowSub"
+        }
+    ]
+}
