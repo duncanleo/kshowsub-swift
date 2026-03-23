@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Bump the version"
+        required: true
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - major
+          - minor
+          - patch
+      pre:
+        description: "Pre-release"
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Swift
+        uses: swift-actions/setup-swift@v3
+        with:
+          swift-version: 6.2
+      - name: Build
+        run: swift build -c release
+      # - name: Test
+      #   run: swift test
+      - name: Stage release binary
+        run: |
+          cp .build/release/KShowSub ./KShowSub-aarch64-apple-darwin
+          chmod +x ./KShowSub-aarch64-apple-darwin
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: KShowSub
+          path: KShowSub-aarch64-apple-darwin
+          retention-days: 1
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Bump arguments
+        id: bump_args
+        run: |
+          set -e
+          case "${{ inputs.bump }}" in
+            auto) ARGS="--auto" ;;
+            major) ARGS="--major" ;;
+            minor) ARGS="--minor" ;;
+            patch) ARGS="--patch" ;;
+            *)
+              echo "Unknown bump: ${{ inputs.bump }}" >&2
+              exit 1
+              ;;
+          esac
+          if [ "${{ inputs.pre }}" = "true" ]; then
+            ARGS="$ARGS --pre"
+          fi
+          echo "args=$ARGS" >> "$GITHUB_OUTPUT"
+      - name: Semver release
+        uses: cocogitto/cocogitto-action@v4.2.0
+        id: release
+        with:
+          command: bump
+          args: ${{ steps.bump_args.outputs.args }}
+      - name: Push changes
+        run: |-
+          git push origin ${{ github.ref_name }}
+          git push origin ${{ steps.release.outputs.version }}
+      - name: Download binary
+        uses: actions/download-artifact@v8
+        with:
+          name: KShowSub
+      - name: Generate changelog
+        id: changelog
+        uses: cocogitto/cocogitto-action@v4.2.0
+        with:
+          command: changelog
+          args: --at ${{ steps.release.outputs.version }}
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.release.outputs.version }}
+          body: ${{ steps.changelog.outputs.stdout }}
+          draft: false
+          prerelease: ${{ inputs.pre }}
+          tag_name: ${{ steps.release.outputs.version }}
+          files: KShowSub*
