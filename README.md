@@ -68,6 +68,7 @@ KShowSub -i video.mp4 -o out.ass -l ko-KR \
 | Provider | ID | Notes |
 |----------|-----|--------|
 | Apple Intelligence | `apple-intelligence` | Default. On-device; no API key. Requires an Apple Intelligence–capable Mac and OS. |
+| Apple Translation | `apple-translation` | On-device; no API key. Uses the Translation framework (macOS 15+). Language models must be pre-installed via System Settings → Language & Region → Translation Languages. |
 | OpenAI-compatible | `openai-batch` | Set `OPENAI_API_KEY`. Uses the **chat completions** API (`/v1/chat/completions`). Optional: `OPENAI_MODEL` (default `gpt-5-nano`), `OPENAI_BASE_URL` (defaults to `https://api.openai.com`), `OPENAI_AUTH` (`bearer` or `x-api-key`). CLI: `--openai-model`, `--openai-base-url`, `--openai-auth`. Point `--openai-base-url` at any OpenAI-compatible gateway root (e.g. Gemini’s OpenAI endpoint); the client appends `/v1/chat/completions`. |
 
 Run `KShowSub --help` for the full option list and defaults.
