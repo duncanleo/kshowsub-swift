@@ -11,7 +11,8 @@ struct KShowSubCLI: AsyncParsableCommand {
         abstract:
             "Generate ASS subtitles from video using Speech (dialogue) and Vision OCR (on-screen text).",
         discussion:
-            "Runs speech recognition and OCR in parallel, then merges both into a single ASS file with dialogue at the bottom and OCR text at the top. Optional translation to a target locale."
+            "Runs speech recognition and OCR in parallel, then merges both into a single ASS file with dialogue at the bottom and OCR text at the top. Optional translation to a target locale.",
+        version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
     )
 
     @Option(name: .shortAndLong, help: "Input video file path")

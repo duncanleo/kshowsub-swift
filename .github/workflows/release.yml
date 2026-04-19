@@ -19,33 +19,12 @@ on:
         default: false
 
 jobs:
-  build:
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v6
-      - name: Set up Swift
-        uses: swift-actions/setup-swift@v3
-        with:
-          swift-version: 6.2
-      - name: Build
-        run: swift build -c release
-      # - name: Test
-      #   run: swift test
-      - name: Stage release binary
-        run: |
-          cp .build/release/KShowSub ./KShowSub-aarch64-apple-darwin
-          chmod +x ./KShowSub-aarch64-apple-darwin
-      - name: Upload binary
-        uses: actions/upload-artifact@v7
-        with:
-          name: KShowSub
-          path: KShowSub-aarch64-apple-darwin
-          retention-days: 1
-  release:
-    needs: build
+  bump:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -78,6 +57,47 @@ jobs:
         run: |-
           git push origin ${{ github.ref_name }}
           git push origin ${{ steps.release.outputs.version }}
+
+  build:
+    needs: bump
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.bump.outputs.version }}
+      - name: Set up Swift
+        uses: swift-actions/setup-swift@v3
+        with:
+          swift-version: 6.2
+      - name: Inject version into Info.plist
+        run: |
+          VERSION="${{ needs.bump.outputs.version }}"
+          VERSION="${VERSION#v}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" SupportingFiles/Info.plist
+      - name: Build
+        run: swift build -c release
+      # - name: Test
+      #   run: swift test
+      - name: Stage release binary
+        run: |
+          cp .build/release/KShowSub ./KShowSub-aarch64-apple-darwin
+          chmod +x ./KShowSub-aarch64-apple-darwin
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: KShowSub
+          path: KShowSub-aarch64-apple-darwin
+          retention-days: 1
+
+  release:
+    needs: [bump, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Download binary
         uses: actions/download-artifact@v8
         with:
@@ -87,13 +107,13 @@ jobs:
         uses: cocogitto/cocogitto-action@v4.2.0
         with:
           command: changelog
-          args: --at ${{ steps.release.outputs.version }}
+          args: --at ${{ needs.bump.outputs.version }}
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ steps.release.outputs.version }}
+          name: ${{ needs.bump.outputs.version }}
           body: ${{ steps.changelog.outputs.stdout }}
           draft: false
           prerelease: ${{ inputs.pre }}
-          tag_name: ${{ steps.release.outputs.version }}
+          tag_name: ${{ needs.bump.outputs.version }}
           files: KShowSub*
