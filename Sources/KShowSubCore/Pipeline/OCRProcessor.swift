@@ -1,8 +1,11 @@
 import AVFoundation
 import CoreGraphics
 import Foundation
+import os
 import SubtitleKit
 import Vision
+
+private let logger = Logger(subsystem: "me.duncanleo.kshowsub", category: "OCR")
 
 public enum OCRProcessorError: LocalizedError {
     case noVideoTrack
@@ -75,15 +78,15 @@ public actor OCRProcessor {
         }
 
         if resumeIndex >= frameCount {
-            print("OCR: refiltering \(frameCount) cached frames...")
+            logger.info("OCR: refiltering \(frameCount) cached frames...")
             return mergeConsecutiveDuplicates(
                 frameResults: collapseTextNearDuplicates(frameResults, profile: profile),
                 totalSeconds: totalSeconds, fps: fps)
         }
 
-        print("OCR: processing \(frameCount) frames (\(fps) fps)...")
+        logger.info("OCR: processing \(frameCount) frames (\(fps) fps)...")
         if resumeIndex > 0 {
-            print("OCR: resuming from frame \(resumeIndex + 1) of \(frameCount)...")
+            logger.info("OCR: resuming from frame \(resumeIndex + 1) of \(frameCount)...")
         }
 
         var previousFingerprint: [UInt8]? = cachedRecords.last?.fingerprint
@@ -396,8 +399,8 @@ public actor OCRProcessor {
             let minTextHeightPx = Double(profile.minimumRecognizedTextHeight) * imageHeight
             filtered = observations.filter { obs in
                 guard obs.boundingBoxHeight * imageHeight >= minTextHeightPx else {
-                    print(
-                        "OCR: minimum height excluded \(obs.text) percentage: \(obs.boundingBoxHeight / imageHeight)"
+                    logger.debug(
+                        "OCR: minimum height excluded \(obs.text, privacy: .public) percentage: \(obs.boundingBoxHeight / imageHeight)"
                     )
                     return false
                 }
@@ -405,21 +408,19 @@ public actor OCRProcessor {
                     x: obs.boundingBoxX, y: obs.boundingBoxY,
                     width: obs.boundingBoxWidth, height: obs.boundingBoxHeight)
                 if profile.shouldExclude(boundingBox: box) {
-                    print(
-                        "OCR: excluding \(obs.text)"
-                    )
+                    logger.debug("OCR: excluding \(obs.text, privacy: .public)")
                 }
                 // Ignore very narrow text (with a little margin)
                 if (obs.boundingBoxWidth * 1.05) < obs.boundingBoxHeight {
-                    print(
-                        "OCR: ignoring very narrow text \(obs.text) width: \(obs.boundingBoxWidth) height: \(obs.boundingBoxHeight)"
+                    logger.debug(
+                        "OCR: ignoring very narrow text \(obs.text, privacy: .public) width: \(obs.boundingBoxWidth) height: \(obs.boundingBoxHeight)"
                     )
                     return false
                 }
                 // Ignore heavily skewed text (rotated watermarks, vertical labels, etc.)
                 if let skew = skewDegrees(for: obs), abs(skew) > profile.maximumSkewDegrees {
-                    print(
-                        "OCR: skew excluded \(obs.text) skew: \(String(format: "%.1f", skew))°"
+                    logger.debug(
+                        "OCR: skew excluded \(obs.text, privacy: .public) skew: \(String(format: "%.1f", skew), privacy: .public)°"
                     )
                     return false
                 }
