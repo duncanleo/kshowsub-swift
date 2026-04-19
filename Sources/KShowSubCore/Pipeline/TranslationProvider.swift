@@ -59,6 +59,9 @@ public enum TranslationProviderRegistry {
         AppleIntelligenceTranslationProvider.id: { src, tgt, _ in
             try AppleIntelligenceTranslationProvider(sourceLocale: src, targetLocale: tgt)
         },
+        AppleTranslationProvider.id: { src, tgt, _ in
+            AppleTranslationProvider(sourceLocale: src, targetLocale: tgt)
+        },
         OpenAIBatchTranslationProvider.id: { src, tgt, opts in
             try OpenAIBatchTranslationProvider(
                 sourceLocale: src,
