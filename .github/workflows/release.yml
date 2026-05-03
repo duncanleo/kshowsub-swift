@@ -76,8 +76,8 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" SupportingFiles/Info.plist
       - name: Build
         run: swift build -c release
-      # - name: Test
-      #   run: swift test
+      - name: Test
+        run: swift run KShowSubCoreTestRunner
       - name: Stage release binary
         run: |
           cp .build/release/KShowSub ./KShowSub-aarch64-apple-darwin

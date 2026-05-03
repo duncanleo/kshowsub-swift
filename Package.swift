@@ -35,5 +35,13 @@ let package = Package(
                 ])
             ]
         ),
+        .executableTarget(
+            name: "KShowSubCoreTestRunner",
+            dependencies: [
+                "KShowSubCore",
+                .product(name: "SubtitleKit", package: "swift-subtitle-kit"),
+            ],
+            path: "Tests/KShowSubCoreTestRunner"
+        ),
     ]
 )
