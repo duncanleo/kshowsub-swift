@@ -16,7 +16,10 @@ let package = Package(
             dependencies: [
                 .product(name: "SubtitleKit", package: "swift-subtitle-kit"),
             ],
-            path: "Sources/KShowSubCore"
+            path: "Sources/KShowSubCore",
+            swiftSettings: [
+                .unsafeFlags(["-enable-testing"], .when(configuration: .debug))
+            ]
         ),
         .executableTarget(
             name: "KShowSub",
