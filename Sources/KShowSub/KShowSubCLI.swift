@@ -178,7 +178,7 @@ struct KShowSubCLI: AsyncParsableCommand {
         store: JobStore,
         key: String,
         inputURL: URL,
-        transcriber: VideoSpeechTranscriber
+        transcriber: any VideoSpeechTranscribing
     ) async throws -> [SubtitleCue] {
         if await store.canReuse(stage: .speech, key: key),
             let cached = try await store.loadCues(stage: .speech)
@@ -207,7 +207,7 @@ struct KShowSubCLI: AsyncParsableCommand {
         locale: Locale,
         fps: Int,
         profile: OCRProfile,
-        processor: OCRProcessor
+        processor: any VideoOCRProcessing
     ) async throws -> [SubtitleCue] {
         let existingRecords = try await store.loadOCRFrameRecords(framesKey: framesKey)
         let totalFrameCount = try await Self.ocrFrameCount(videoURL: inputURL, fps: fps)

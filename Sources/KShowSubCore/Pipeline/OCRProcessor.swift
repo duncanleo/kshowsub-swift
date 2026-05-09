@@ -21,7 +21,7 @@ public enum OCRProcessorError: LocalizedError {
     }
 }
 
-public actor OCRProcessor {
+public actor OCRProcessor: VideoOCRProcessing {
     public init() {}
     private struct PendingOCRFrame: @unchecked Sendable {
         let index: Int
@@ -38,7 +38,7 @@ public actor OCRProcessor {
         fps: Int = 5,
         profile: OCRProfile = .default,
         existingFrameRecords: [OCRFrameRecord] = [],
-        persistRecords: (@Sendable ([OCRFrameRecord]) async throws -> Void)? = nil
+        persistRecords: OCRFrameRecordPersistence? = nil
     ) async throws -> [SubtitleCue] {
         precondition(fps >= 1)
         let asset = AVURLAsset(url: videoURL)

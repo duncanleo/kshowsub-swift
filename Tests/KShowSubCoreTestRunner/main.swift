@@ -51,6 +51,7 @@ enum KShowSubCoreTestRunner {
             ("ASSMerger adds styles and renumbers cues", testASSMergerAddsStylesAndRenumbers),
             ("OCRProfile exposes named profiles", testOCRProfileNames),
             ("OCRProfile unfiltered disables filters", testOCRProfileUnfiltered),
+            ("Media provider protocols accept stub implementations", testMediaProviderProtocolsAcceptStubs),
             ("JobStore saves loads and reuses cues", testJobStoreSavesLoadsAndReusesCues),
             ("JobStore respects disabled resume", testJobStoreRespectsDisabledResume),
             ("JobStore loads contiguous OCR frame records", testJobStoreLoadsContiguousOCRFrames),
@@ -227,6 +228,41 @@ func testOCRProfileUnfiltered() throws {
     try expect(!profile.skipSimilarFrames, "Unfiltered profile should disable similar-frame skipping")
 }
 
+func testMediaProviderProtocolsAcceptStubs() async throws {
+    let expectedSpeech = [cue(id: 1, start: 0, end: 500, text: "hello")]
+    let speech: any VideoSpeechTranscribing = StubSpeechTranscriber(cues: expectedSpeech)
+
+    let speechCues = try await speech.transcribe(videoURL: URL(fileURLWithPath: "/tmp/input.mp4"))
+
+    try expectEqual(speechCues, expectedSpeech)
+
+    let expectedOCR = [cue(id: 2, start: 500, end: 1000, text: "sign")]
+    let frameRecord = OCRFrameRecord(
+        index: 0,
+        sampleTimeSeconds: 0,
+        recognizedText: "sign",
+        observations: nil,
+        reusedPreviousText: false,
+        fingerprint: nil
+    )
+    let ocr: any VideoOCRProcessing = StubOCRProcessor(cues: expectedOCR, records: [frameRecord])
+    let recorder = PersistedOCRFrameRecorder()
+
+    let ocrCues = try await ocr.extractText(
+        videoURL: URL(fileURLWithPath: "/tmp/input.mp4"),
+        locale: Locale(identifier: "en-US"),
+        fps: 3,
+        profile: .default,
+        existingFrameRecords: [],
+        persistRecords: { records in
+            await recorder.save(records)
+        }
+    )
+
+    try expectEqual(ocrCues, expectedOCR)
+    try await expectEqual(recorder.recognizedTexts(), ["sign"])
+}
+
 func testJobStoreSavesLoadsAndReusesCues() async throws {
     let root = try makeTemporaryDirectory()
     defer { try? FileManager.default.removeItem(at: root) }
@@ -313,6 +349,45 @@ func testJobStoreLoadsContiguousOCRFrames() async throws {
 
 func cue(id: Int, start: Int, end: Int, text: String) -> SubtitleCue {
     SubtitleCue(id: id, startTime: start, endTime: end, rawText: text, plainText: text)
+}
+
+private struct StubSpeechTranscriber: VideoSpeechTranscribing {
+    let cues: [SubtitleCue]
+
+    func transcribe(videoURL: URL) async throws -> [SubtitleCue] {
+        cues
+    }
+}
+
+private struct StubOCRProcessor: VideoOCRProcessing {
+    let cues: [SubtitleCue]
+    let records: [OCRFrameRecord]
+
+    func extractText(
+        videoURL: URL,
+        locale: Locale,
+        fps: Int,
+        profile: OCRProfile,
+        existingFrameRecords: [OCRFrameRecord],
+        persistRecords: OCRFrameRecordPersistence?
+    ) async throws -> [SubtitleCue] {
+        if let persistRecords {
+            try await persistRecords(records)
+        }
+        return cues
+    }
+}
+
+private actor PersistedOCRFrameRecorder {
+    private var records: [OCRFrameRecord] = []
+
+    func save(_ records: [OCRFrameRecord]) {
+        self.records = records
+    }
+
+    func recognizedTexts() -> [String] {
+        records.map(\.recognizedText)
+    }
 }
 
 func makeTemporaryDirectory() throws -> URL {

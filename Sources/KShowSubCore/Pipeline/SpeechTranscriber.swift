@@ -29,7 +29,7 @@ public enum SpeechTranscriberError: LocalizedError {
     }
 }
 
-public actor VideoSpeechTranscriber {
+public actor VideoSpeechTranscriber: VideoSpeechTranscribing {
     private let locale: Locale
 
     public init(locale: Locale = .init(identifier: "en-US")) {
