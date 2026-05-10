@@ -1,0 +1,7 @@
+{% import "macros" as macros %}
+{% for type_group in commits | group_by_type %}
+#### {{ type_group.0 | upper_first }}
+{% for commit in type_group.1 %}
+{{ macros::remote(commit=commit) }}
+{% endfor %}
+{% endfor %}

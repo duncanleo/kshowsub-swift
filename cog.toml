@@ -21,7 +21,10 @@ tag_prefix = ""
 
 [changelog]
 path = "CHANGELOG.md"
-template = "full_hash"
+template = ".cog/github_release.tera"
+remote = "github.com"
+owner = "duncanleo"
+repository = "kshowsub-swift"
 authors = []
 
 [bump_profiles]
