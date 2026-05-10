@@ -21,7 +21,7 @@ swift run KShowSubCoreTestRunner
 swift run KShowSub --help
 ```
 
-Use `swift build -c release` before release changes. Full OCR/speech runs may require macOS permissions and real video fixtures; do not add those to default CI unless explicitly requested.
+Use `swift build -c release --product KShowSub` before release changes. Full OCR/speech runs may require macOS permissions and real video fixtures; do not add those to default CI unless explicitly requested.
 
 ## Working Rules
 

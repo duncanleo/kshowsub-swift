@@ -12,7 +12,7 @@ swift run KShowSubCoreTestRunner
 For release work:
 
 ```bash
-swift build -c release
+swift build -c release --product KShowSub
 ```
 
 For CLI smoke checks:

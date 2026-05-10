@@ -18,7 +18,7 @@ Both pipelines run in parallel. The result is a single merged subtitle file. You
 From the repository root:
 
 ```bash
-swift build -c release
+swift build -c release --product KShowSub
 ```
 
 The binary is at `.build/release/KShowSub`.
