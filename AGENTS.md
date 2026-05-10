@@ -29,6 +29,7 @@ Use `swift build -c release --product KShowSub` before release changes. Full OCR
 - Keep API-key, network, Apple Intelligence, Speech, and Vision checks out of default tests.
 - Treat generated `.ass` files and `.kshowsub/` workspaces as local artifacts.
 - Update docs when changing CLI flags, stage artifacts, provider behavior, or pipeline architecture.
+- Use Conventional Commits for all agent-created commits, for example `feat: add translation resume support`.
 - If a repeated review comment becomes a rule, encode it in tests, scripts, or docs.
 
 ## Deeper Context
