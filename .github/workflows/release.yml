@@ -19,12 +19,13 @@ on:
         default: false
 
 jobs:
-  bump:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: macos-26
     permissions:
       contents: write
     outputs:
       version: ${{ steps.release.outputs.version }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
         with:
@@ -53,28 +54,16 @@ jobs:
         with:
           command: bump
           args: ${{ steps.bump_args.outputs.args }}
-      - name: Push changes
-        run: |-
-          git push origin ${{ github.ref_name }}
-          git push origin ${{ steps.release.outputs.version }}
-
-  build:
-    needs: bump
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.bump.outputs.version }}
       - name: Set up Swift
         uses: swift-actions/setup-swift@v3
         with:
           swift-version: 6.2
       - name: Inject version into Info.plist
         run: |
-          VERSION="${{ needs.bump.outputs.version }}"
+          VERSION="${{ steps.release.outputs.version }}"
           VERSION="${VERSION#v}"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" SupportingFiles/Info.plist
-      - name: Build
+      - name: Build release binary
         run: swift build -c release --product KShowSub
       - name: Test
         run: swift run KShowSubCoreTestRunner
@@ -88,9 +77,13 @@ jobs:
           name: KShowSub
           path: KShowSub-aarch64-apple-darwin
           retention-days: 1
+      - name: Push changes
+        run: |-
+          git push origin ${{ github.ref_name }}
+          git push origin ${{ steps.release.outputs.version }}
 
   release:
-    needs: [bump, build]
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -98,7 +91,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ needs.bump.outputs.version }}
+          ref: ${{ needs.build.outputs.version }}
       - name: Download binary
         uses: actions/download-artifact@v8
         with:
@@ -108,13 +101,13 @@ jobs:
         uses: cocogitto/cocogitto-action@v4.2.0
         with:
           command: changelog
-          args: --at ${{ needs.bump.outputs.version }}
+          args: --at ${{ needs.build.outputs.version }}
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ needs.bump.outputs.version }}
+          name: ${{ needs.build.outputs.version }}
           body: ${{ steps.changelog.outputs.stdout }}
           draft: false
           prerelease: ${{ inputs.pre }}
-          tag_name: ${{ needs.bump.outputs.version }}
+          tag_name: ${{ needs.build.outputs.version }}
           files: KShowSub*
