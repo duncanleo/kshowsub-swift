@@ -21,6 +21,7 @@ tag_prefix = ""
 
 [changelog]
 path = "CHANGELOG.md"
+template = "full_hash"
 authors = []
 
 [bump_profiles]
