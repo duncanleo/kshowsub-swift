@@ -24,7 +24,7 @@ KShowSub is currently a macOS Swift Package that builds a command-line tool and 
 
 Speech providers implement `VideoSpeechTranscribing`. The current `VideoSpeechTranscriber` is the Apple Speech-backed implementation.
 
-OCR providers implement `VideoOCRProcessing`. The current `OCRProcessor` is the Apple Vision-backed implementation and owns frame sampling, filtering, resumable OCR frame records, and conversion into top-aligned subtitle cues.
+OCR providers implement `VideoOCRProcessing`. The current `OCRProcessor` is the Apple Vision-backed implementation and owns frame sampling, filtering, resumable OCR frame records, and conversion into positioned subtitle cues when bounding boxes are available.
 
 Translation providers implement `TranslationProvider`. Provider configuration validation belongs at the registry/provider boundary; pipeline code should not guess environment variables or network behavior beyond that interface.
 

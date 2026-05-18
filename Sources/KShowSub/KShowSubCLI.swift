@@ -111,6 +111,7 @@ struct KShowSubCLI: AsyncParsableCommand {
         let resolvedLocale = Locale(identifier: locale)
         let transcriber = VideoSpeechTranscriber(locale: resolvedLocale)
         let ocrProcessor = OCRProcessor()
+        let playRes = try await Self.videoPresentationResolution(videoURL: inputURL)
         let store = try JobStore(
             inputURL: inputURL, workDirOverride: workDir, resumeEnabled: resume)
         try await store.prepareWorkspace()
@@ -167,10 +168,10 @@ struct KShowSubCLI: AsyncParsableCommand {
             allCues = try await translator.translate(allCues)
         }
 
-        let subtitle = ASSMerger.merge(cues: allCues)
+        let subtitle = ASSMerger.merge(cues: allCues, playResX: playRes.x, playResY: playRes.y)
 
         try await subtitle.save(to: outputURL, format: .ass, lineEnding: .lf)
-        try Self.injectPlayRes(into: outputURL)
+        try Self.injectPlayRes(into: outputURL, playResX: playRes.x, playResY: playRes.y)
         print("Wrote \(subtitle.cues.count) cues to \(outputURL.path)")
     }
 
@@ -266,16 +267,33 @@ struct KShowSubCLI: AsyncParsableCommand {
         return max(1, Int(ceil(totalSeconds * Double(fps))))
     }
 
+    private static func videoPresentationResolution(videoURL: URL) async throws -> (x: Int, y: Int) {
+        let asset = AVURLAsset(url: videoURL)
+        guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
+            return (OCRCuePosition.defaultPlayResX, OCRCuePosition.defaultPlayResY)
+        }
+
+        let naturalSize = try await videoTrack.load(.naturalSize)
+        let preferredTransform = try await videoTrack.load(.preferredTransform)
+        let transformed = naturalSize.applying(preferredTransform)
+        let width = abs(transformed.width) > 0 ? abs(transformed.width) : abs(naturalSize.width)
+        let height = abs(transformed.height) > 0 ? abs(transformed.height) : abs(naturalSize.height)
+        return (
+            max(1, Int(width.rounded())),
+            max(1, Int(height.rounded()))
+        )
+    }
+
     private static func stageKey(parts: [String]) -> String {
         JobStore.hashString(parts.joined(separator: "|"))
     }
 
     /// Injects PlayResX/PlayResY into [Script Info] so alignment and MarginV render correctly.
     /// Without these, players default to 384x288 which breaks top/bottom positioning.
-    private static func injectPlayRes(into url: URL) throws {
+    private static func injectPlayRes(into url: URL, playResX: Int, playResY: Int) throws {
         var content = try String(contentsOf: url, encoding: .utf8)
         guard !content.contains("PlayResX:") else { return }
-        let playResHeaders = "\nPlayResX: 1920\nPlayResY: 1080\n"
+        let playResHeaders = "\nPlayResX: \(playResX)\nPlayResY: \(playResY)\n"
         if let scriptTypeRange = content.range(of: "ScriptType: v4.00+") {
             content.insert(contentsOf: playResHeaders, at: scriptTypeRange.upperBound)
             try content.write(to: url, atomically: true, encoding: .utf8)

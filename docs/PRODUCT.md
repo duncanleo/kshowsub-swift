@@ -5,9 +5,13 @@ KShowSub generates ASS subtitles from a video by combining speech transcription 
 ## Expected Output
 
 - Dialogue from speech recognition appears as bottom-centered subtitle cues.
-- OCR text appears as top-centered subtitle cues.
+- OCR text appears near its detected on-screen location when Vision bounding boxes are available.
+  Older cached OCR text without bounding boxes falls back to the TopOCR style.
+- Positioned OCR text uses limited dynamic font sizing from detected text height, clamped to
+  avoid extreme tiny or oversized overlays.
 - Output format is Advanced SubStation Alpha (`.ass`).
-- `PlayResX` and `PlayResY` are injected when absent so margins render predictably.
+- `PlayResX` and `PlayResY` are injected from the video presentation size when absent so
+  OCR positions and margins render predictably.
 
 ## Resume Behavior
 

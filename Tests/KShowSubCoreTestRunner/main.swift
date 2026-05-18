@@ -32,6 +32,18 @@ func expectEqual<T: Equatable>(
     try expect(actual == expected, "Expected \(actual) to equal \(expected)", file: file, line: line)
 }
 
+func require<T>(
+    _ value: T?,
+    _ message: String,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) throws -> T {
+    guard let value else {
+        throw TestFailure(message: message, file: file, line: line)
+    }
+    return value
+}
+
 @main
 enum KShowSubCoreTestRunner {
     typealias Test = (name: String, run: () async throws -> Void)
@@ -49,6 +61,9 @@ enum KShowSubCoreTestRunner {
             ("SpeechCueMerger splits on pause", testSpeechCueMergerSplitsOnPause),
             ("SpeechCueMerger wraps long cues", testSpeechCueMergerWrapsLongCue),
             ("ASSMerger adds styles and renumbers cues", testASSMergerAddsStylesAndRenumbers),
+            ("ASSMerger applies OCR position overrides", testASSMergerAppliesOCRPositionOverrides),
+            ("ASSMerger applies clamped OCR font overrides", testASSMergerAppliesClampedOCRFontOverrides),
+            ("OCRCuePosition derives normalized center", testOCRCuePositionDerivesNormalizedCenter),
             ("OCRProfile exposes named profiles", testOCRProfileNames),
             ("OCRProfile unfiltered disables filters", testOCRProfileUnfiltered),
             ("Media provider protocols accept stub implementations", testMediaProviderProtocolsAcceptStubs),
@@ -215,6 +230,60 @@ func testASSMergerAddsStylesAndRenumbers() throws {
     try expectEqual(styleNames, ["TopOCR", "BottomDialogue"])
 }
 
+func testASSMergerAppliesOCRPositionOverrides() throws {
+    let cue = SubtitleCue(
+        id: 1,
+        startTime: 0,
+        endTime: 500,
+        rawText: "sign",
+        plainText: "sign",
+        attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+            + OCRCuePosition.attributes(for: .init(x: 0.25, y: 0.75))
+    )
+
+    let subtitle = ASSMerger.merge(cues: [cue], playResX: 1280, playResY: 720)
+
+    try expectEqual(subtitle.cues[0].rawText, "{\\an5\\pos(320,180)}sign")
+}
+
+func testASSMergerAppliesClampedOCRFontOverrides() throws {
+    let small = SubtitleCue(
+        id: 1,
+        startTime: 0,
+        endTime: 500,
+        rawText: "small",
+        plainText: "small",
+        attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+            + OCRCuePosition.attributes(for: .init(x: 0.25, y: 0.75), fontHeight: 0.01)
+    )
+    let large = SubtitleCue(
+        id: 2,
+        startTime: 0,
+        endTime: 500,
+        rawText: "large",
+        plainText: "large",
+        attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+            + OCRCuePosition.attributes(for: .init(x: 0.75, y: 0.25), fontHeight: 0.20)
+    )
+
+    let subtitle = ASSMerger.merge(cues: [small, large], playResX: 1280, playResY: 720)
+
+    try expectEqual(subtitle.cues[0].rawText, "{\\an5\\fs34\\pos(320,180)}small")
+    try expectEqual(subtitle.cues[1].rawText, "{\\an5\\fs64\\pos(960,540)}large")
+}
+
+func testOCRCuePositionDerivesNormalizedCenter() throws {
+    let observations = [
+        ocrObservation(text: "Top", x: 0.20, y: 0.70, width: 0.20, height: 0.10),
+        ocrObservation(text: "Bottom", x: 0.30, y: 0.50, width: 0.40, height: 0.10),
+    ]
+
+    let center = try require(OCRCuePosition.normalizedCenter(for: observations), "Missing OCR center")
+
+    try expectEqual(String(format: "%.2f", center.x), "0.45")
+    try expectEqual(String(format: "%.2f", center.y), "0.65")
+}
+
 func testOCRProfileNames() throws {
     try expect(OCRProfile.named("default") != nil, "Missing default profile")
     try expect(OCRProfile.named("unfiltered") != nil, "Missing unfiltered profile")
@@ -349,6 +418,30 @@ func testJobStoreLoadsContiguousOCRFrames() async throws {
 
 func cue(id: Int, start: Int, end: Int, text: String) -> SubtitleCue {
     SubtitleCue(id: id, startTime: start, endTime: end, rawText: text, plainText: text)
+}
+
+func ocrObservation(
+    text: String,
+    x: Double,
+    y: Double,
+    width: Double,
+    height: Double
+) -> OCRTextObservation {
+    OCRTextObservation(
+        text: text,
+        boundingBoxX: x,
+        boundingBoxY: y,
+        boundingBoxWidth: width,
+        boundingBoxHeight: height,
+        topLeftX: nil,
+        topLeftY: nil,
+        topRightX: nil,
+        topRightY: nil,
+        bottomLeftX: nil,
+        bottomLeftY: nil,
+        bottomRightX: nil,
+        bottomRightY: nil
+    )
 }
 
 private struct StubSpeechTranscriber: VideoSpeechTranscribing {
