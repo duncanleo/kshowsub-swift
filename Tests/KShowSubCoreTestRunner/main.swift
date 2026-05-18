@@ -68,6 +68,10 @@ enum KShowSubCoreTestRunner {
             ("OCRCuePosition does not match missing position to present position", testOCRCuePositionDoesNotMatchMissingPositionToPresentPosition),
             ("OCRProfile exposes named profiles", testOCRProfileNames),
             ("OCRProfile unfiltered disables filters", testOCRProfileUnfiltered),
+            ("OCRProcessor temporal filter keeps recurring observations", testOCRTemporalFilterKeepsRecurringObservations),
+            ("OCRProcessor temporal filter keeps animated observations", testOCRTemporalFilterKeepsAnimatedObservations),
+            ("OCRProcessor temporal filter drops one-off observations", testOCRTemporalFilterDropsOneOffObservations),
+            ("OCRProcessor temporal filter can be disabled", testOCRTemporalFilterCanBeDisabled),
             ("Media provider protocols accept stub implementations", testMediaProviderProtocolsAcceptStubs),
             ("JobStore saves loads and reuses cues", testJobStoreSavesLoadsAndReusesCues),
             ("JobStore respects disabled resume", testJobStoreRespectsDisabledResume),
@@ -331,6 +335,84 @@ func testOCRProfileUnfiltered() throws {
 
     try expect(!profile.filterLogoRegions, "Unfiltered profile should disable logo filtering")
     try expect(!profile.skipSimilarFrames, "Unfiltered profile should disable similar-frame skipping")
+    try expect(!profile.filterTransientObservations, "Unfiltered profile should disable temporal filtering")
+}
+
+func testOCRTemporalFilterKeepsRecurringObservations() throws {
+    let records = [
+        ocrFrame(
+            index: 0,
+            observations: [
+                ocrObservation(text: "CAPTION", x: 0.40, y: 0.72, width: 0.20, height: 0.06)
+            ]),
+        ocrFrame(
+            index: 1,
+            observations: [
+                ocrObservation(text: "CAPTION", x: 0.405, y: 0.72, width: 0.20, height: 0.06)
+            ]),
+    ]
+
+    let results = OCRProcessor.frameResults(from: records, imageHeight: 1000, profile: .default)
+
+    try expectEqual(results.map(\.0), [0, 1])
+    try expectEqual(results.map(\.1), ["CAPTION", "CAPTION"])
+}
+
+func testOCRTemporalFilterKeepsAnimatedObservations() throws {
+    let records = [
+        ocrFrame(
+            index: 0,
+            observations: [
+                ocrObservation(text: "CAPTION", x: 0.34, y: 0.72, width: 0.16, height: 0.05)
+            ]),
+        ocrFrame(index: 1, observations: []),
+        ocrFrame(
+            index: 2,
+            observations: [
+                ocrObservation(text: "CAPTION", x: 0.43, y: 0.72, width: 0.21, height: 0.06)
+            ]),
+    ]
+
+    let results = OCRProcessor.frameResults(from: records, imageHeight: 1000, profile: .default)
+
+    try expectEqual(results.map(\.0), [0, 2])
+    try expectEqual(results.map(\.1), ["CAPTION", "CAPTION"])
+}
+
+func testOCRTemporalFilterDropsOneOffObservations() throws {
+    let records = [
+        ocrFrame(
+            index: 0,
+            observations: [
+                ocrObservation(text: "CAPTION", x: 0.40, y: 0.72, width: 0.20, height: 0.06),
+                ocrObservation(text: "SHIRT", x: 0.10, y: 0.40, width: 0.14, height: 0.06),
+            ]),
+        ocrFrame(
+            index: 1,
+            observations: [
+                ocrObservation(text: "CAPTION", x: 0.405, y: 0.72, width: 0.20, height: 0.06)
+            ]),
+    ]
+
+    let results = OCRProcessor.frameResults(from: records, imageHeight: 1000, profile: .default)
+
+    try expectEqual(results.map(\.1), ["CAPTION", "CAPTION"])
+}
+
+func testOCRTemporalFilterCanBeDisabled() throws {
+    let records = [
+        ocrFrame(
+            index: 0,
+            observations: [
+                ocrObservation(text: "SHIRT", x: 0.10, y: 0.40, width: 0.14, height: 0.06)
+            ]),
+        ocrFrame(index: 1, observations: []),
+    ]
+    let profile = OCRProfile(filterTransientObservations: false)
+
+    let results = OCRProcessor.frameResults(from: records, imageHeight: 1000, profile: profile)
+
+    try expectEqual(results.map(\.1), ["SHIRT"])
 }
 
 func testMediaProviderProtocolsAcceptStubs() async throws {
@@ -456,6 +538,17 @@ func cue(id: Int, start: Int, end: Int, text: String) -> SubtitleCue {
     SubtitleCue(id: id, startTime: start, endTime: end, rawText: text, plainText: text)
 }
 
+func ocrFrame(index: Int, observations: [OCRTextObservation]) -> OCRFrameRecord {
+    OCRFrameRecord(
+        index: index,
+        sampleTimeSeconds: Double(index),
+        recognizedText: "",
+        observations: observations,
+        reusedPreviousText: false,
+        fingerprint: nil
+    )
+}
+
 func ocrObservation(
     text: String,
     x: Double,
@@ -469,14 +562,14 @@ func ocrObservation(
         boundingBoxY: y,
         boundingBoxWidth: width,
         boundingBoxHeight: height,
-        topLeftX: nil,
-        topLeftY: nil,
-        topRightX: nil,
-        topRightY: nil,
-        bottomLeftX: nil,
-        bottomLeftY: nil,
-        bottomRightX: nil,
-        bottomRightY: nil
+        topLeftX: x,
+        topLeftY: y + height,
+        topRightX: x + width,
+        topRightY: y + height,
+        bottomLeftX: x,
+        bottomLeftY: y,
+        bottomRightX: x + width,
+        bottomRightY: y
     )
 }
 
