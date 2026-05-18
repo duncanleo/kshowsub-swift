@@ -1,5 +1,6 @@
 import Foundation
 import SubtitleKit
+
 @testable import KShowSubCore
 
 struct TestFailure: Error, CustomStringConvertible {
@@ -29,7 +30,8 @@ func expectEqual<T: Equatable>(
     file: StaticString = #filePath,
     line: UInt = #line
 ) throws {
-    try expect(actual == expected, "Expected \(actual) to equal \(expected)", file: file, line: line)
+    try expect(
+        actual == expected, "Expected \(actual) to equal \(expected)", file: file, line: line)
 }
 
 func require<T>(
@@ -53,26 +55,96 @@ enum KShowSubCoreTestRunner {
             ("IndexedTranslationBatchParser parses item elements", testParsesItemElements),
             ("IndexedTranslationBatchParser parses CDATA", testParsesCDATA),
             ("IndexedTranslationBatchParser parses indexed fallback lines", testParsesIndexedLines),
-            ("IndexedTranslationBatchParser throws on invalid output", testParserThrowsOnInvalidOutput),
-            ("TranslationMessageFormatting returns raw text without context", testMessageWithoutContext),
+            (
+                "IndexedTranslationBatchParser throws on invalid output",
+                testParserThrowsOnInvalidOutput
+            ),
+            (
+                "TranslationMessageFormatting returns raw text without context",
+                testMessageWithoutContext
+            ),
             ("TranslationMessageFormatting includes context markers", testMessageWithContext),
             ("TranslationMessageFormatting truncates long text", testMessageTruncatesLongText),
             ("SpeechCueMerger merges nearby words", testSpeechCueMergerMergesNearbyWords),
             ("SpeechCueMerger splits on pause", testSpeechCueMergerSplitsOnPause),
             ("SpeechCueMerger wraps long cues", testSpeechCueMergerWrapsLongCue),
             ("ASSMerger adds styles and renumbers cues", testASSMergerAddsStylesAndRenumbers),
-            ("ASSMerger leaves OCR positioning disabled by default", testASSMergerLeavesOCRPositioningDisabledByDefault),
+            (
+                "ASSMerger leaves OCR positioning disabled by default",
+                testASSMergerLeavesOCRPositioningDisabledByDefault
+            ),
             ("ASSMerger applies OCR position overrides", testASSMergerAppliesOCRPositionOverrides),
-            ("ASSMerger applies RTL OCR position overrides", testASSMergerAppliesRTLOCRPositionOverrides),
-            ("ASSMerger keeps positioned OCR above overlapping dialogue", testASSMergerKeepsPositionedOCRAboveOverlappingDialogue),
-            ("ASSMerger lanes positioned OCR above overlapping dialogue", testASSMergerLanesPositionedOCRAboveOverlappingDialogue),
-            ("ASSMerger applies clamped OCR font overrides", testASSMergerAppliesClampedOCRFontOverrides),
+            (
+                "ASSMerger applies RTL OCR position overrides",
+                testASSMergerAppliesRTLOCRPositionOverrides
+            ),
+            (
+                "ASSMerger keeps positioned OCR above overlapping dialogue",
+                testASSMergerKeepsPositionedOCRAboveOverlappingDialogue
+            ),
+            (
+                "ASSMerger lanes positioned OCR above overlapping dialogue",
+                testASSMergerLanesPositionedOCRAboveOverlappingDialogue
+            ),
+            (
+                "ASSMerger applies clamped OCR font overrides",
+                testASSMergerAppliesClampedOCRFontOverrides
+            ),
             ("OCRCuePosition derives normalized center", testOCRCuePositionDerivesNormalizedCenter),
-            ("OCRCuePosition derives directional anchors", testOCRCuePositionDerivesDirectionalAnchors),
-            ("OCRCuePosition does not match missing position to present position", testOCRCuePositionDoesNotMatchMissingPositionToPresentPosition),
+            (
+                "OCRCuePosition derives directional anchors",
+                testOCRCuePositionDerivesDirectionalAnchors
+            ),
+            (
+                "OCRCuePosition does not match missing position to present position",
+                testOCRCuePositionDoesNotMatchMissingPositionToPresentPosition
+            ),
+            (
+                "PostProcessingPrompt includes Korean show subtitle guidance",
+                testPostProcessingPromptIncludesKoreanShowGuidance
+            ),
+            (
+                "PostProcessingResponseParser parses JSON object",
+                testPostProcessingResponseParserParsesObject
+            ),
+            (
+                "PostProcessingResponseParser extracts wrapped JSON",
+                testPostProcessingResponseParserExtractsWrappedJSON
+            ),
+            (
+                "PostProcessingResponseParser extracts fenced array",
+                testPostProcessingResponseParserExtractsFencedArray
+            ),
+            (
+                "PostProcessingResponseParser accepts alternate timing fields",
+                testPostProcessingResponseParserAcceptsAlternateTimingFields
+            ),
+            (
+                "PostProcessingResponseParser infers missing end times",
+                testPostProcessingResponseParserInfersMissingEndTimes
+            ),
+            (
+                "SubtitlePostProcessor returns bottom dialogue cues",
+                testSubtitlePostProcessorReturnsBottomDialogueCues
+            ),
+            (
+                "SubtitlePostProcessor chunks limited providers",
+                testSubtitlePostProcessorChunksLimitedProviders
+            ),
+            (
+                "SubtitlePostProcessor adaptively splits context errors",
+                testSubtitlePostProcessorAdaptivelySplitsContextErrors
+            ),
+            (
+                "SubtitlePostProcessor preserves single unsupported cues",
+                testSubtitlePostProcessorPreservesSingleUnsupportedCues
+            ),
             ("OCRProfile exposes named profiles", testOCRProfileNames),
             ("OCRProfile unfiltered disables filters", testOCRProfileUnfiltered),
-            ("Media provider protocols accept stub implementations", testMediaProviderProtocolsAcceptStubs),
+            (
+                "Media provider protocols accept stub implementations",
+                testMediaProviderProtocolsAcceptStubs
+            ),
             ("JobStore saves loads and reuses cues", testJobStoreSavesLoadsAndReusesCues),
             ("JobStore respects disabled resume", testJobStoreRespectsDisabledResume),
             ("JobStore loads contiguous OCR frame records", testJobStoreLoadsContiguousOCRFrames),
@@ -101,11 +173,11 @@ enum KShowSubCoreTestRunner {
 
 func testParsesItemElements() throws {
     let output = """
-    <translations>
-      <item index="0">Hello &amp; welcome</item>
-      <item index="2">&lt;quiet&gt;</item>
-    </translations>
-    """
+        <translations>
+          <item index="0">Hello &amp; welcome</item>
+          <item index="2">&lt;quiet&gt;</item>
+        </translations>
+        """
 
     let parsed = try IndexedTranslationBatchParser.parse(xml: output)
 
@@ -122,9 +194,9 @@ func testParsesCDATA() throws {
 
 func testParsesIndexedLines() throws {
     let output = """
-    0: First line
-    1 - Second line
-    """
+        0: First line
+        1 - Second line
+        """
 
     let parsed = try IndexedTranslationBatchParser.parse(xml: output)
 
@@ -157,13 +229,15 @@ func testMessageWithContext() throws {
 
     try expect(message.contains("[Previous lines"), "Missing previous context marker")
     try expect(message.contains("Before one\nBefore two"), "Missing previous context")
-    try expect(message.contains("[Translate this line]\nTranslate me"), "Missing translation marker")
+    try expect(
+        message.contains("[Translate this line]\nTranslate me"), "Missing translation marker")
     try expect(message.contains("[Following lines"), "Missing following context marker")
     try expect(message.contains("After one"), "Missing following context")
 }
 
 func testMessageTruncatesLongText() throws {
-    let longText = String(repeating: "a", count: TranslationMessageFormatting.maxCharsPerRequest + 20)
+    let longText = String(
+        repeating: "a", count: TranslationMessageFormatting.maxCharsPerRequest + 20)
     let request = TranslationRequest(text: longText)
 
     let message = TranslationMessageFormatting.userMessageText(for: request)
@@ -191,7 +265,8 @@ func testSpeechCueMergerSplitsOnPause() throws {
         cue(id: 2, start: 1000, end: 1300, text: "second"),
     ]
 
-    let merged = SpeechCueMerger(locale: Locale(identifier: "en-US"), pauseThresholdMs: 600).merge(cues)
+    let merged = SpeechCueMerger(locale: Locale(identifier: "en-US"), pauseThresholdMs: 600).merge(
+        cues)
 
     try expectEqual(merged.map(\.plainText), ["first", "second"])
 }
@@ -400,7 +475,8 @@ func testOCRCuePositionDerivesNormalizedCenter() throws {
         ocrObservation(text: "Bottom", x: 0.30, y: 0.50, width: 0.40, height: 0.10),
     ]
 
-    let center = try require(OCRCuePosition.normalizedCenter(for: observations), "Missing OCR center")
+    let center = try require(
+        OCRCuePosition.normalizedCenter(for: observations), "Missing OCR center")
 
     try expectEqual(String(format: "%.2f", center.x), "0.45")
     try expectEqual(String(format: "%.2f", center.y), "0.65")
@@ -431,8 +507,212 @@ func testOCRCuePositionDoesNotMatchMissingPositionToPresentPosition() throws {
     let positioned = OCRCuePosition.Normalized(x: 0.25, y: 0.75)
 
     try expect(OCRCuePosition.isNear(nil, nil), "Missing positions should match each other")
-    try expect(!OCRCuePosition.isNear(nil, positioned), "Missing position should not match placed text")
-    try expect(!OCRCuePosition.isNear(positioned, nil), "Placed text should not match missing position")
+    try expect(
+        !OCRCuePosition.isNear(nil, positioned), "Missing position should not match placed text")
+    try expect(
+        !OCRCuePosition.isNear(positioned, nil), "Placed text should not match missing position")
+}
+
+func testPostProcessingPromptIncludesKoreanShowGuidance() throws {
+    let prompt = PostProcessingPrompt.systemPrompt(
+        locale: Locale(identifier: "ko-KR"), profile: .openAI)
+    let applePrompt = PostProcessingPrompt.systemPrompt(
+        locale: Locale(identifier: "ko-KR"), profile: .appleIntelligence)
+
+    try expect(prompt.contains("Korean shows"), "Expected Korean show subtitle guidance")
+    try expect(prompt.contains("never more than two visual lines"), "Expected line-count guidance")
+    try expect(prompt.contains("parentheses"), "Expected parenthetical OCR guidance")
+    try expect(prompt.contains("not summarization"), "Expected anti-summarization guidance")
+    try expect(prompt.contains("avoid overly sparse output"), "Expected density guidance")
+    try expect(
+        prompt.contains("If there are too many useful on-screen text pieces"),
+        "Expected OCR overload guidance")
+    try expect(prompt.contains("Split long speech"), "Expected long-sentence splitting guidance")
+    try expect(
+        prompt.contains("For each input cue whose source is \"speech\""),
+        "Expected speech preservation guidance")
+    try expect(
+        prompt.contains("OCR is secondary to speech"), "Expected speech-over-OCR priority guidance")
+    try expect(
+        prompt.contains("Preserve OCR that is not present in dialogue"),
+        "Expected unique OCR preservation guidance")
+    try expect(
+        applePrompt.count < prompt.count, "Expected Apple Intelligence prompt to be more compact")
+}
+
+func testPostProcessingResponseParserParsesObject() throws {
+    let output = """
+        ```json
+        {"cues":[{"startTime":100,"endTime":900,"text":"Keep me"}]}
+        ```
+        """
+
+    let parsed = try PostProcessingResponseParser.parse(output)
+
+    try expectEqual(parsed, [PostProcessedCue(startTime: 100, endTime: 900, text: "Keep me")])
+}
+
+func testPostProcessingResponseParserExtractsWrappedJSON() throws {
+    let output = """
+        Here is the cleaned subtitle track:
+
+        {"subtitles":[{"start_ms":1200,"end_ms":1800,"text":"Door code"}]}
+
+        Done.
+        """
+
+    let parsed = try PostProcessingResponseParser.parse(output)
+
+    try expectEqual(parsed, [PostProcessedCue(startTime: 1200, endTime: 1800, text: "Door code")])
+}
+
+func testPostProcessingResponseParserExtractsFencedArray() throws {
+    let output = """
+        ```json
+        [{"startTime":8280,"endTime":8333,"text":"이렇게 스톱으로 갈 거야."}]
+        ```
+        """
+
+    let parsed = try PostProcessingResponseParser.parse(output)
+
+    try expectEqual(
+        parsed,
+        [PostProcessedCue(startTime: 8280, endTime: 8333, text: "이렇게 스톱으로 갈 거야.")]
+    )
+}
+
+func testPostProcessingResponseParserAcceptsAlternateTimingFields() throws {
+    let output = """
+        {"cues":[
+          {"start":"00:01.500","end":"00:02.750","line":"(caption: shocked)"},
+          {"begin":3.0,"stop":4.25,"subtitle":"Let's go"}
+        ]}
+        """
+
+    let parsed = try PostProcessingResponseParser.parse(output)
+
+    try expectEqual(
+        parsed,
+        [
+            PostProcessedCue(startTime: 1500, endTime: 2750, text: "(caption: shocked)"),
+            PostProcessedCue(startTime: 3000, endTime: 4250, text: "Let's go"),
+        ]
+    )
+}
+
+func testPostProcessingResponseParserInfersMissingEndTimes() throws {
+    let output = """
+        [{"startTime":89333,"text":"시민과 함께, 자유로운 혁신"},{"startTime":90000,"text":"시민고 자유로"}]
+        """
+
+    let parsed = try PostProcessingResponseParser.parse(output)
+
+    try expectEqual(
+        parsed,
+        [
+            PostProcessedCue(startTime: 89333, endTime: 90000, text: "시민과 함께, 자유로운 혁신"),
+            PostProcessedCue(startTime: 90000, endTime: 92000, text: "시민고 자유로"),
+        ]
+    )
+}
+
+func testSubtitlePostProcessorReturnsBottomDialogueCues() async throws {
+    let cues = [
+        SubtitleCue(
+            id: 1,
+            startTime: 0,
+            endTime: 500,
+            rawText: "Hello",
+            plainText: "Hello",
+            attributes: [SubtitleAttribute(key: "Style", value: "BottomDialogue")]
+        ),
+        SubtitleCue(
+            id: 2,
+            startTime: 100,
+            endTime: 600,
+            rawText: "Hello",
+            plainText: "Hello",
+            attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+        ),
+    ]
+    let provider = StubPostProcessingProvider(
+        outputs: [PostProcessedCue(startTime: 0, endTime: 600, text: "Hello")]
+    )
+
+    let processed = try await SubtitlePostProcessor(provider: provider).postProcess(cues)
+
+    try expectEqual(processed.count, 1)
+    try expectEqual(processed[0].plainText, "Hello")
+    try expectEqual(processed[0].startTime, 0)
+    try expectEqual(processed[0].endTime, 600)
+    try expect(
+        processed[0].attributes.contains { $0.key == "Style" && $0.value == "BottomDialogue" },
+        "Expected post-processed cues to use bottom dialogue style"
+    )
+}
+
+func testSubtitlePostProcessorChunksLimitedProviders() async throws {
+    let cues = (0..<6).map { index in
+        SubtitleCue(
+            id: index + 1,
+            startTime: index * 1_000,
+            endTime: index * 1_000 + 500,
+            rawText: "Line \(index) \(String(repeating: "x", count: 40))",
+            plainText: "Line \(index) \(String(repeating: "x", count: 40))",
+            attributes: [SubtitleAttribute(key: "Style", value: "BottomDialogue")]
+        )
+    }
+    let recorder = PostProcessingBatchRecorder()
+    let provider = ChunkingStubPostProcessingProvider(maxPromptCharacters: 240, recorder: recorder)
+
+    let processed = try await SubtitlePostProcessor(provider: provider).postProcess(cues)
+    let batchSizes = await recorder.batchSizes()
+
+    try expect(batchSizes.count > 1, "Expected provider calls to be split into multiple windows")
+    try expectEqual(batchSizes.reduce(0, +), 6)
+    try expectEqual(processed.count, 6)
+}
+
+func testSubtitlePostProcessorAdaptivelySplitsContextErrors() async throws {
+    let cues = (0..<4).map { index in
+        SubtitleCue(
+            id: index + 1,
+            startTime: index * 1_000,
+            endTime: index * 1_000 + 500,
+            rawText: "Line \(index)",
+            plainText: "Line \(index)",
+            attributes: [SubtitleAttribute(key: "Style", value: "BottomDialogue")]
+        )
+    }
+    let recorder = PostProcessingBatchRecorder()
+    let provider = ContextFailingPostProcessingProvider(recorder: recorder)
+
+    let processed = try await SubtitlePostProcessor(provider: provider).postProcess(cues)
+    let batchSizes = await recorder.batchSizes()
+
+    try expectEqual(batchSizes, [4, 2, 2])
+    try expectEqual(processed.map(\.plainText), ["Line 0", "Line 1", "Line 2", "Line 3"])
+}
+
+func testSubtitlePostProcessorPreservesSingleUnsupportedCues() async throws {
+    let cues = [
+        SubtitleCue(
+            id: 1,
+            startTime: 0,
+            endTime: 500,
+            rawText: "문",
+            plainText: "문",
+            attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+        )
+    ]
+    let provider = UnsupportedLanguagePostProcessingProvider()
+
+    let processed = try await SubtitlePostProcessor(provider: provider).postProcess(cues)
+
+    try expectEqual(processed.count, 1)
+    try expectEqual(processed[0].plainText, "문")
+    try expectEqual(processed[0].startTime, 0)
+    try expectEqual(processed[0].endTime, 500)
 }
 
 func testOCRProfileNames() throws {
@@ -445,7 +725,8 @@ func testOCRProfileUnfiltered() throws {
     let profile = OCRProfile.unfiltered
 
     try expect(!profile.filterLogoRegions, "Unfiltered profile should disable logo filtering")
-    try expect(!profile.skipSimilarFrames, "Unfiltered profile should disable similar-frame skipping")
+    try expect(
+        !profile.skipSimilarFrames, "Unfiltered profile should disable similar-frame skipping")
 }
 
 func testMediaProviderProtocolsAcceptStubs() async throws {
@@ -497,7 +778,8 @@ func testJobStoreSavesLoadsAndReusesCues() async throws {
         SubtitleCue(id: 1, startTime: 0, endTime: 500, rawText: "Hello", plainText: "Hello")
     ]
 
-    try await store.saveCues(cues, stage: .speech, key: key, artifactName: StageArtifacts.speechCues)
+    try await store.saveCues(
+        cues, stage: .speech, key: key, artifactName: StageArtifacts.speechCues)
 
     let canReuse = await store.canReuse(stage: .speech, key: key)
     try expect(canReuse, "Expected saved cues to be reusable")
@@ -619,6 +901,86 @@ private struct StubOCRProcessor: VideoOCRProcessing {
             try await persistRecords(records)
         }
         return cues
+    }
+}
+
+private struct StubPostProcessingProvider: SubtitlePostProcessingProvider {
+    static let id = "stub"
+    static let displayName = "Stub"
+
+    let outputs: [PostProcessedCue]
+
+    func estimateCost(for cues: [PostProcessingInputCue]) -> TranslationCostEstimate {
+        TranslationCostEstimate(estimatedUSD: 0, lines: [])
+    }
+
+    func postProcess(_ cues: [PostProcessingInputCue]) async throws -> [PostProcessedCue] {
+        outputs
+    }
+}
+
+private struct ChunkingStubPostProcessingProvider: SubtitlePostProcessingProvider {
+    static let id = "chunking-stub"
+    static let displayName = "Chunking Stub"
+
+    let maxPromptCharacters: Int?
+    let recorder: PostProcessingBatchRecorder
+
+    func estimateCost(for cues: [PostProcessingInputCue]) -> TranslationCostEstimate {
+        TranslationCostEstimate(estimatedUSD: 0, lines: [])
+    }
+
+    func postProcess(_ cues: [PostProcessingInputCue]) async throws -> [PostProcessedCue] {
+        await recorder.record(cues.count)
+        return cues.map { cue in
+            PostProcessedCue(startTime: cue.startTime, endTime: cue.endTime, text: cue.text)
+        }
+    }
+}
+
+private struct ContextFailingPostProcessingProvider: SubtitlePostProcessingProvider {
+    static let id = "context-failing-stub"
+    static let displayName = "Context Failing Stub"
+
+    let recorder: PostProcessingBatchRecorder
+
+    func estimateCost(for cues: [PostProcessingInputCue]) -> TranslationCostEstimate {
+        TranslationCostEstimate(estimatedUSD: 0, lines: [])
+    }
+
+    func postProcess(_ cues: [PostProcessingInputCue]) async throws -> [PostProcessedCue] {
+        await recorder.record(cues.count)
+        if cues.count > 2 {
+            throw PostProcessingError.contextWindowExceeded
+        }
+        return cues.map { cue in
+            PostProcessedCue(startTime: cue.startTime, endTime: cue.endTime, text: cue.text)
+        }
+    }
+}
+
+private struct UnsupportedLanguagePostProcessingProvider: SubtitlePostProcessingProvider {
+    static let id = "unsupported-language-stub"
+    static let displayName = "Unsupported Language Stub"
+
+    func estimateCost(for cues: [PostProcessingInputCue]) -> TranslationCostEstimate {
+        TranslationCostEstimate(estimatedUSD: 0, lines: [])
+    }
+
+    func postProcess(_ cues: [PostProcessingInputCue]) async throws -> [PostProcessedCue] {
+        throw PostProcessingError.unsupportedLanguageOrLocale
+    }
+}
+
+private actor PostProcessingBatchRecorder {
+    private var sizes: [Int] = []
+
+    func record(_ size: Int) {
+        sizes.append(size)
+    }
+
+    func batchSizes() -> [Int] {
+        sizes
     }
 }
 
