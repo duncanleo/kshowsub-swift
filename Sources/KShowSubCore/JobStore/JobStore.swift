@@ -6,6 +6,7 @@ public enum PipelineStage: String, Codable, CaseIterable {
     case speech
     case ocr
     case merge
+    case postProcess = "post_process"
     case translation
 }
 
@@ -128,6 +129,7 @@ public struct StageArtifacts {
     public static let ocrFrames = "ocr-frames.jsonl"
     public static let ocrCues = "ocr-cues.json"
     public static let mergedCues = "merged-cues.json"
+    public static let postProcessedCues = "post-processed-cues.json"
     public static let translatedCues = "translated-cues.json"
 }
 

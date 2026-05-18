@@ -23,7 +23,7 @@ struct KShowSubCLI: AsyncParsableCommand {
         abstract:
             "Generate ASS subtitles from video using Speech (dialogue) and Vision OCR (on-screen text).",
         discussion:
-            "Runs speech recognition and OCR in parallel, then merges both into a single ASS file with dialogue at the bottom and OCR text at the top. Optional translation to a target locale.",
+            "Runs speech recognition and OCR in parallel, then merges both into a single ASS file. Optional LLM post-processing can reduce OCR/speech overlap into one bottom subtitle track before translation.",
         version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
     )
 
@@ -90,17 +90,27 @@ struct KShowSubCLI: AsyncParsableCommand {
     )
     var translateProvider: String = "apple-intelligence"
 
+    @Flag(name: .long, help: "Use an LLM to reduce OCR and speech cues into one bottom subtitle track before translation.")
+    var postProcess: Bool = false
+
+    @Option(
+        name: .long,
+        help:
+            "Post-processing provider: \(SubtitlePostProcessingProviderRegistry.availableIDs.joined(separator: ", "))"
+    )
+    var postProcessProvider: String = "apple-intelligence"
+
     @Option(
         name: [.customLong("openai-model")],
         help:
-            "Model for the openai-batch provider (default: gpt-5-nano, overrides OPENAI_MODEL). Uses direct chat completions requests."
+            "Model for OpenAI-compatible translation/post-processing providers (default: gpt-5.4-nano, overrides OPENAI_MODEL). Uses direct chat completions requests."
     )
     var openAIModel: String?
 
     @Option(
         name: [.customLong("openai-base-url")],
         help:
-            "Base URL for the openai-batch provider (overrides OPENAI_BASE_URL). For OpenAI-compatible gateways (e.g. Gemini’s /v1beta/openai), set this to that root; /v1/chat/completions is appended."
+            "Base URL for OpenAI-compatible translation/post-processing providers (overrides OPENAI_BASE_URL). For gateways (e.g. Gemini’s /v1beta/openai), set this to that root; /v1/chat/completions is appended."
     )
     var openAIBaseURL: String?
 
@@ -113,13 +123,20 @@ struct KShowSubCLI: AsyncParsableCommand {
 
     mutating func validate() throws {
         try TranslationProviderRegistry.validateProviderID(translateProvider)
+        try SubtitlePostProcessingProviderRegistry.validateProviderID(postProcessProvider)
+        var providerOptions: [String: String] = [:]
+        if let m = openAIModel { providerOptions["openai-model"] = m }
+        if let u = openAIBaseURL { providerOptions["openai-base-url"] = u }
+        if let a = openAIAuth { providerOptions["openai-auth"] = a }
         if translate {
-            var providerOptions: [String: String] = [:]
-            if let m = openAIModel { providerOptions["openai-model"] = m }
-            if let u = openAIBaseURL { providerOptions["openai-base-url"] = u }
-            if let a = openAIAuth { providerOptions["openai-auth"] = a }
             try TranslationProviderRegistry.validateProviderConfiguration(
                 id: translateProvider, options: providerOptions)
+        }
+        if postProcess {
+            try SubtitlePostProcessingProviderRegistry.validateProviderConfiguration(
+                id: postProcessProvider,
+                options: providerOptions
+            )
         }
     }
 
@@ -180,6 +197,34 @@ struct KShowSubCLI: AsyncParsableCommand {
             dialogue: mergedDialogue,
             ocr: ocr
         )
+
+        if postProcess {
+            var providerOptions: [String: String] = [:]
+            if let m = openAIModel { providerOptions["openai-model"] = m }
+            if let u = openAIBaseURL { providerOptions["openai-base-url"] = u }
+            if let a = openAIAuth { providerOptions["openai-auth"] = a }
+            let provider = try SubtitlePostProcessingProviderRegistry.resolveOrThrow(
+                id: postProcessProvider,
+                locale: resolvedLocale,
+                options: providerOptions
+            )
+            let postProcessor = SubtitlePostProcessor(provider: provider)
+            let postProcessKey = Self.stageKey(parts: [
+                "post-process",
+                mergeKey,
+                resolvedLocale.identifier,
+                provider.id,
+                openAIModel ?? ProcessInfo.processInfo.environment["OPENAI_MODEL"] ?? "",
+                openAIBaseURL ?? ProcessInfo.processInfo.environment["OPENAI_BASE_URL"] ?? "",
+                openAIAuth ?? ProcessInfo.processInfo.environment["OPENAI_AUTH"] ?? "",
+            ])
+            allCues = try await loadOrCreatePostProcessedCues(
+                store: store,
+                key: postProcessKey,
+                cues: allCues,
+                processor: postProcessor
+            )
+        }
 
         if translate {
             let target = Locale(identifier: targetLocale)
@@ -294,6 +339,35 @@ struct KShowSubCLI: AsyncParsableCommand {
         try await store.saveCues(
             merged, stage: .merge, key: key, artifactName: StageArtifacts.mergedCues)
         return merged
+    }
+
+    private func loadOrCreatePostProcessedCues(
+        store: JobStore,
+        key: String,
+        cues: [SubtitleCue],
+        processor: SubtitlePostProcessor
+    ) async throws -> [SubtitleCue] {
+        if await store.canReuse(stage: .postProcess, key: key),
+            let cached = try await store.loadCues(stage: .postProcess)
+        {
+            print("Post-process: reusing cached cues.")
+            return cached
+        }
+
+        try await store.markStageRunning(.postProcess, key: key)
+        do {
+            let postProcessed = try await processor.postProcess(cues)
+            try await store.saveCues(
+                postProcessed,
+                stage: .postProcess,
+                key: key,
+                artifactName: StageArtifacts.postProcessedCues
+            )
+            return postProcessed
+        } catch {
+            try? await store.markStageFailed(.postProcess, key: key, error: error)
+            throw error
+        }
     }
 
     private static func ocrFrameCount(videoURL: URL, fps: Int) async throws -> Int {
