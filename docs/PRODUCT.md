@@ -16,6 +16,7 @@ KShowSub generates ASS subtitles from a video by combining speech transcription 
 - Positioned OCR is kept above the bottom dialogue region when it overlaps a dialogue cue in
   time, and simultaneous bottom-region OCR cues are assigned vertical lanes to reduce collisions
   with each other and with speech subtitles.
+- When `--post-process` is enabled, an LLM provider reduces speech and OCR into one bottom-centered track, keeping relevant on-screen text and dropping duplicates or visual noise.
 - Output format is Advanced SubStation Alpha (`.ass`).
 - `PlayResX` and `PlayResY` are injected when absent so margins render predictably. Both default
   and positioned OCR modes keep the historical 1920x1080 script resolution so dialogue subtitle
@@ -28,6 +29,10 @@ Intermediate artifacts are stored in a per-input workspace. By default, reruns r
 ## Translation Behavior
 
 Translation is optional. Providers must preserve cue timing and metadata. Multi-line cues may be translated line-by-line and reassembled with ASS line breaks in raw text.
+
+## Post-Processing Behavior
+
+Post-processing is optional and runs before translation. Providers receive timestamped speech/OCR cues and return a single readable subtitle track with bottom-dialogue styling. Apple Intelligence uses small ordered cue windows to stay within its 4k context limit. The built-in providers are Apple Intelligence (`apple-intelligence`) and OpenAI-compatible chat completions (`openai`), using the existing `--openai-model`, `--openai-base-url`, and `--openai-auth` options for OpenAI-compatible configuration.
 
 ## Default Quality Bar
 

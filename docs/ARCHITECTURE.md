@@ -5,7 +5,7 @@ KShowSub is currently a macOS Swift Package that builds a command-line tool and 
 ## Targets
 
 - `KShowSub`: executable target. Owns CLI flags, input/output paths, pipeline orchestration, progress messages, and final ASS file writing.
-- `KShowSubCore`: library target. Owns speech/OCR processing, cue merging, translation, resumable job state, and provider interfaces.
+- `KShowSubCore`: library target. Owns speech/OCR processing, cue merging, LLM post-processing, translation, resumable job state, and provider interfaces.
 
 ## Pipeline
 
@@ -13,12 +13,13 @@ KShowSub is currently a macOS Swift Package that builds a command-line tool and 
 2. Speech transcription and OCR extraction run concurrently.
 3. `SpeechCueMerger` combines word-level speech cues into readable dialogue cues.
 4. OCR cues and dialogue cues are sorted into a merged timeline.
-5. Optional translation rewrites cue text while preserving timing and metadata.
-6. `ASSMerger` writes styled ASS output with top OCR and bottom dialogue styles.
+5. Optional LLM post-processing reduces OCR and speech into a single bottom-dialogue track.
+6. Optional translation rewrites cue text while preserving timing and metadata.
+7. `ASSMerger` writes styled ASS output with top OCR and bottom dialogue styles.
 
 ## Persistence
 
-`JobStore` creates one workspace per input fingerprint. It stores a manifest plus stage artifacts for speech cues, OCR frame records, OCR cues, merged cues, and translated cues. Tests should use explicit temporary work directories.
+`JobStore` creates one workspace per input fingerprint. It stores a manifest plus stage artifacts for speech cues, OCR frame records, OCR cues, merged cues, post-processed cues, and translated cues. Tests should use explicit temporary work directories.
 
 ## Provider Boundaries
 
@@ -27,6 +28,8 @@ Speech providers implement `VideoSpeechTranscribing`. The current `VideoSpeechTr
 OCR providers implement `VideoOCRProcessing`. The current `OCRProcessor` is the Apple Vision-backed implementation and owns frame sampling, filtering, resumable OCR frame records, and conversion into top-aligned subtitle cues by default. The CLI can opt into positioned OCR overlays with `--position-ocr` when bounding boxes are available; `--ocr-position-direction` selects left-to-right left-edge anchoring or right-to-left right-edge anchoring. `ASSMerger` owns final ASS collision avoidance because it has the merged OCR/dialogue timeline.
 
 Translation providers implement `TranslationProvider`. Provider configuration validation belongs at the registry/provider boundary; pipeline code should not guess environment variables or network behavior beyond that interface.
+
+Subtitle post-processing providers implement `SubtitlePostProcessingProvider`. The registry mirrors translation provider selection and currently supports Apple Intelligence and OpenAI-compatible chat completions.
 
 Pipeline orchestration should accept protocol existentials or a registry-resolved provider, not concrete framework implementations. If provider selection becomes user-configurable for speech or OCR, mirror the translation registry pattern: validate provider IDs and configuration at the boundary, then pass only the protocol instance into the pipeline.
 
