@@ -14,7 +14,7 @@ struct OpenAIBatchTranslationProvider: TranslationProvider, Sendable {
     static let id = "openai-batch"
     static let displayName = "OpenAI"
 
-    private static let defaultModel = "gpt-5-nano"
+    private static let defaultModel = "gpt-5.4-nano"
     private static let maxConcurrentRequests = 10
     private static let maxRequestsPerSecond = 1.5
     private static let maxItemsPerBatch = 200
