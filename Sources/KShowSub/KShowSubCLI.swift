@@ -38,6 +38,13 @@ struct KShowSubCLI: AsyncParsableCommand {
     )
     var ocrProfile: String = "default"
 
+    @Flag(
+        name: .long,
+        help:
+            "Experimentally place OCR subtitles near their detected screen positions with limited dynamic font sizing."
+    )
+    var positionOCR: Bool = false
+
     @Option(
         name: .long,
         help: "Directory for resumable intermediate artifacts. Defaults to Application Support."
@@ -110,8 +117,11 @@ struct KShowSubCLI: AsyncParsableCommand {
 
         let resolvedLocale = Locale(identifier: locale)
         let transcriber = VideoSpeechTranscriber(locale: resolvedLocale)
-        let ocrProcessor = OCRProcessor()
-        let playRes = try await Self.videoPresentationResolution(videoURL: inputURL)
+        let ocrProcessor = OCRProcessor(positionedOverlays: positionOCR)
+        let playRes =
+            positionOCR
+            ? try await Self.videoPresentationResolution(videoURL: inputURL)
+            : (x: OCRCuePosition.defaultPlayResX, y: OCRCuePosition.defaultPlayResY)
         let store = try JobStore(
             inputURL: inputURL, workDirOverride: workDir, resumeEnabled: resume)
         try await store.prepareWorkspace()
@@ -120,8 +130,9 @@ struct KShowSubCLI: AsyncParsableCommand {
         let resolvedProfile = OCRProfile.named(ocrProfile)!
         let speechKey = Self.stageKey(parts: ["speech", resolvedLocale.identifier])
         let ocrFramesKey = Self.stageKey(parts: ["ocr", resolvedLocale.identifier, String(ocrFPS)])
+        let ocrLayoutKey = positionOCR ? "positioned" : "top"
         let ocrKey = Self.stageKey(parts: [
-            "ocr", resolvedLocale.identifier, String(ocrFPS), ocrProfile,
+            "ocr", resolvedLocale.identifier, String(ocrFPS), ocrProfile, ocrLayoutKey,
         ])
 
         async let dialogueCues: [SubtitleCue] = loadOrCreateSpeechCues(
@@ -168,7 +179,12 @@ struct KShowSubCLI: AsyncParsableCommand {
             allCues = try await translator.translate(allCues)
         }
 
-        let subtitle = ASSMerger.merge(cues: allCues, playResX: playRes.x, playResY: playRes.y)
+        let subtitle = ASSMerger.merge(
+            cues: allCues,
+            playResX: playRes.x,
+            playResY: playRes.y,
+            enableOCRPositioning: positionOCR
+        )
 
         try await subtitle.save(to: outputURL, format: .ass, lineEnding: .lf)
         try Self.injectPlayRes(into: outputURL, playResX: playRes.x, playResY: playRes.y)

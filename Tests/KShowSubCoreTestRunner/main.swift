@@ -61,6 +61,7 @@ enum KShowSubCoreTestRunner {
             ("SpeechCueMerger splits on pause", testSpeechCueMergerSplitsOnPause),
             ("SpeechCueMerger wraps long cues", testSpeechCueMergerWrapsLongCue),
             ("ASSMerger adds styles and renumbers cues", testASSMergerAddsStylesAndRenumbers),
+            ("ASSMerger leaves OCR positioning disabled by default", testASSMergerLeavesOCRPositioningDisabledByDefault),
             ("ASSMerger applies OCR position overrides", testASSMergerAppliesOCRPositionOverrides),
             ("ASSMerger applies clamped OCR font overrides", testASSMergerAppliesClampedOCRFontOverrides),
             ("OCRCuePosition derives normalized center", testOCRCuePositionDerivesNormalizedCenter),
@@ -230,6 +231,22 @@ func testASSMergerAddsStylesAndRenumbers() throws {
     try expectEqual(styleNames, ["TopOCR", "BottomDialogue"])
 }
 
+func testASSMergerLeavesOCRPositioningDisabledByDefault() throws {
+    let cue = SubtitleCue(
+        id: 1,
+        startTime: 0,
+        endTime: 500,
+        rawText: "sign",
+        plainText: "sign",
+        attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+            + OCRCuePosition.attributes(for: .init(x: 0.25, y: 0.75), fontHeight: 0.05)
+    )
+
+    let subtitle = ASSMerger.merge(cues: [cue], playResX: 1280, playResY: 720)
+
+    try expectEqual(subtitle.cues[0].rawText, "sign")
+}
+
 func testASSMergerAppliesOCRPositionOverrides() throws {
     let cue = SubtitleCue(
         id: 1,
@@ -241,7 +258,12 @@ func testASSMergerAppliesOCRPositionOverrides() throws {
             + OCRCuePosition.attributes(for: .init(x: 0.25, y: 0.75))
     )
 
-    let subtitle = ASSMerger.merge(cues: [cue], playResX: 1280, playResY: 720)
+    let subtitle = ASSMerger.merge(
+        cues: [cue],
+        playResX: 1280,
+        playResY: 720,
+        enableOCRPositioning: true
+    )
 
     try expectEqual(subtitle.cues[0].rawText, "{\\an5\\pos(320,180)}sign")
 }
@@ -266,7 +288,12 @@ func testASSMergerAppliesClampedOCRFontOverrides() throws {
             + OCRCuePosition.attributes(for: .init(x: 0.75, y: 0.25), fontHeight: 0.20)
     )
 
-    let subtitle = ASSMerger.merge(cues: [small, large], playResX: 1280, playResY: 720)
+    let subtitle = ASSMerger.merge(
+        cues: [small, large],
+        playResX: 1280,
+        playResY: 720,
+        enableOCRPositioning: true
+    )
 
     try expectEqual(subtitle.cues[0].rawText, "{\\an5\\fs34\\pos(320,180)}small")
     try expectEqual(subtitle.cues[1].rawText, "{\\an5\\fs64\\pos(960,540)}large")

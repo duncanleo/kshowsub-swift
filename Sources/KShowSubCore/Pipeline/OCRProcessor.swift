@@ -22,7 +22,12 @@ public enum OCRProcessorError: LocalizedError {
 }
 
 public actor OCRProcessor: VideoOCRProcessing {
-    public init() {}
+    private let positionedOverlays: Bool
+
+    public init(positionedOverlays: Bool = false) {
+        self.positionedOverlays = positionedOverlays
+    }
+
     private struct PendingOCRFrame: @unchecked Sendable {
         let index: Int
         let image: CGImage
@@ -88,8 +93,13 @@ public actor OCRProcessor: VideoOCRProcessing {
         let resumeIndex = cachedRecords.count
         var frameResults: [OCRFrameText] = cachedRecords.flatMap { record in
             if let obs = record.observations {
-                return Self.filteredFrameTexts(
-                    obs, index: record.index, imageHeight: imageHeight, profile: profile)
+                return Self.frameTexts(
+                    from: obs,
+                    index: record.index,
+                    imageHeight: imageHeight,
+                    profile: profile,
+                    positionedOverlays: positionedOverlays
+                )
             } else {
                 return record.recognizedText.isEmpty
                     ? []
@@ -106,7 +116,11 @@ public actor OCRProcessor: VideoOCRProcessing {
         if resumeIndex >= frameCount {
             logger.info("OCR: refiltering \(frameCount) cached frames...")
             return mergeFrameTexts(
-                frameResults: frameResults, totalSeconds: totalSeconds, fps: fps, profile: profile)
+                frameResults: frameResults,
+                totalSeconds: totalSeconds,
+                fps: fps,
+                profile: profile
+            )
         }
 
         logger.info("OCR: processing \(frameCount) frames (\(fps) fps)...")
@@ -191,8 +205,13 @@ public actor OCRProcessor: VideoOCRProcessing {
                 frameResults.append(contentsOf:
                     flushedRecords.flatMap { record -> [OCRFrameText] in
                         guard let obs = record.observations else { return [] }
-                        return Self.filteredFrameTexts(
-                            obs, index: record.index, imageHeight: imageHeight, profile: profile)
+                        return Self.frameTexts(
+                            from: obs,
+                            index: record.index,
+                            imageHeight: imageHeight,
+                            profile: profile,
+                            positionedOverlays: positionedOverlays
+                        )
                     })
                 if let persistRecords {
                     try await persistRecords(flushedRecords)
@@ -200,8 +219,13 @@ public actor OCRProcessor: VideoOCRProcessing {
                 pendingOCRFrames.removeAll(keepingCapacity: true)
 
                 frameResults.append(contentsOf:
-                    Self.filteredFrameTexts(
-                        lastObservations, index: k, imageHeight: imageHeight, profile: profile)
+                    Self.frameTexts(
+                        from: lastObservations,
+                        index: k,
+                        imageHeight: imageHeight,
+                        profile: profile,
+                        positionedOverlays: positionedOverlays
+                    )
                 )
                 if let persistRecords {
                     try await persistRecords([
@@ -236,8 +260,13 @@ public actor OCRProcessor: VideoOCRProcessing {
                     frameResults.append(contentsOf:
                         flushedRecords.flatMap { record -> [OCRFrameText] in
                             guard let obs = record.observations else { return [] }
-                            return Self.filteredFrameTexts(
-                                obs, index: record.index, imageHeight: imageHeight, profile: profile)
+                            return Self.frameTexts(
+                                from: obs,
+                                index: record.index,
+                                imageHeight: imageHeight,
+                                profile: profile,
+                                positionedOverlays: positionedOverlays
+                            )
                         })
                     if let persistRecords {
                         try await persistRecords(flushedRecords)
@@ -263,8 +292,13 @@ public actor OCRProcessor: VideoOCRProcessing {
         frameResults.append(contentsOf:
             flushedRecords.flatMap { record -> [OCRFrameText] in
                 guard let obs = record.observations else { return [] }
-                return Self.filteredFrameTexts(
-                    obs, index: record.index, imageHeight: imageHeight, profile: profile)
+                return Self.frameTexts(
+                    from: obs,
+                    index: record.index,
+                    imageHeight: imageHeight,
+                    profile: profile,
+                    positionedOverlays: positionedOverlays
+                )
             })
         if let persistRecords {
             try await persistRecords(flushedRecords)
@@ -418,7 +452,21 @@ public actor OCRProcessor: VideoOCRProcessing {
         }
     }
 
-    private static func filteredFrameTexts(
+    private static func frameTexts(
+        from observations: [OCRTextObservation],
+        index: Int,
+        imageHeight: Double,
+        profile: OCRProfile,
+        positionedOverlays: Bool
+    ) -> [OCRFrameText] {
+        if positionedOverlays {
+            return positionedFrameTexts(
+                observations, index: index, imageHeight: imageHeight, profile: profile)
+        }
+        return joinedFrameText(observations, index: index, imageHeight: imageHeight, profile: profile)
+    }
+
+    private static func positionedFrameTexts(
         _ observations: [OCRTextObservation],
         index: Int,
         imageHeight: Double,
@@ -433,6 +481,18 @@ public actor OCRProcessor: VideoOCRProcessing {
                 fontHeight: OCRCuePosition.normalizedFontHeight(for: obs)
             )
         }
+    }
+
+    private static func joinedFrameText(
+        _ observations: [OCRTextObservation],
+        index: Int,
+        imageHeight: Double,
+        profile: OCRProfile
+    ) -> [OCRFrameText] {
+        let filtered = filteredObservations(observations, imageHeight: imageHeight, profile: profile)
+        let text = filtered.map { displayText(for: $0, profile: profile) }.joined(separator: "\\N")
+        guard !text.isEmpty else { return [] }
+        return [OCRFrameText(index: index, text: text, position: nil, fontHeight: nil)]
     }
 
     private static func displayText(for obs: OCRTextObservation, profile: OCRProfile) -> String {
@@ -512,6 +572,14 @@ public actor OCRProcessor: VideoOCRProcessing {
         fps: Int,
         profile: OCRProfile
     ) -> [SubtitleCue] {
+        if !positionedOverlays {
+            return mergeConsecutiveDuplicates(
+                frameResults: collapseTextNearDuplicates(frameResults, profile: profile),
+                totalSeconds: totalSeconds,
+                fps: fps
+            )
+        }
+
         let fpsDouble = Double(fps)
         var cues: [SubtitleCue] = []
         var active: [ActiveOCRCue] = []
@@ -633,5 +701,76 @@ public actor OCRProcessor: VideoOCRProcessing {
             attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
                 + OCRCuePosition.attributes(for: active.position, fontHeight: active.fontHeight)
         )
+    }
+
+    private func collapseTextNearDuplicates(
+        _ frameResults: [OCRFrameText],
+        profile: OCRProfile
+    ) -> [OCRFrameText] {
+        guard !frameResults.isEmpty else { return frameResults }
+        var out: [OCRFrameText] = []
+        out.reserveCapacity(frameResults.count)
+        out.append(frameResults[0])
+        for i in 1..<frameResults.count {
+            let result = frameResults[i]
+            let prev = out.last!
+            if Self.normalizedEditDistance(result.text, prev.text) < profile.textSimilarityReuseThreshold {
+                out.append(
+                    OCRFrameText(
+                        index: result.index,
+                        text: prev.text,
+                        position: nil,
+                        fontHeight: nil
+                    ))
+            } else {
+                out.append(result)
+            }
+        }
+        return out
+    }
+
+    private func mergeConsecutiveDuplicates(
+        frameResults: [OCRFrameText],
+        totalSeconds: Double,
+        fps: Int
+    ) -> [SubtitleCue] {
+        let fpsDouble = Double(fps)
+        var cues: [SubtitleCue] = []
+        var id = 1
+        var i = 0
+
+        while i < frameResults.count {
+            let result = frameResults[i]
+            let startFrame = result.index
+            let text = result.text
+            var endFrame = startFrame + 1
+            var j = i + 1
+
+            while j < frameResults.count,
+                frameResults[j].text == text,
+                frameResults[j].index == endFrame
+            {
+                endFrame += 1
+                j += 1
+            }
+
+            let startMs = Int((Double(startFrame) / fpsDouble) * 1000)
+            let endSecondsBound = min(Double(endFrame) / fpsDouble, totalSeconds)
+            let endMs = Int(endSecondsBound * 1000)
+
+            let cue = SubtitleCue(
+                id: id,
+                startTime: startMs,
+                endTime: endMs,
+                rawText: text,
+                plainText: text.replacingOccurrences(of: "\\N", with: "\n"),
+                attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+            )
+            cues.append(cue)
+            id += 1
+            i = j
+        }
+
+        return cues
     }
 }

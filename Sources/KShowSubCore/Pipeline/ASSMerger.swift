@@ -31,12 +31,14 @@ public enum ASSMerger {
         dialogueCues: [SubtitleCue],
         ocrCues: [SubtitleCue],
         playResX: Int = OCRCuePosition.defaultPlayResX,
-        playResY: Int = OCRCuePosition.defaultPlayResY
+        playResY: Int = OCRCuePosition.defaultPlayResY,
+        enableOCRPositioning: Bool = false
     ) -> Subtitle {
         merge(
             cues: (dialogueCues + ocrCues).sorted { $0.startTime < $1.startTime },
             playResX: playResX,
-            playResY: playResY
+            playResY: playResY,
+            enableOCRPositioning: enableOCRPositioning
         )
     }
 
@@ -44,7 +46,8 @@ public enum ASSMerger {
     public static func merge(
         cues: [SubtitleCue],
         playResX: Int = OCRCuePosition.defaultPlayResX,
-        playResY: Int = OCRCuePosition.defaultPlayResY
+        playResY: Int = OCRCuePosition.defaultPlayResY,
+        enableOCRPositioning: Bool = false
     ) -> Subtitle {
         let topOCRStyle = makeStyle(id: 1, name: "TopOCR", values: topOCRStyleValues)
         let bottomDialogueStyle = makeStyle(
@@ -61,7 +64,12 @@ public enum ASSMerger {
                         cueIdentifier: cue.cueIdentifier,
                         startTime: cue.startTime,
                         endTime: cue.endTime,
-                        rawText: assText(for: cue, playResX: playResX, playResY: playResY),
+                        rawText: assText(
+                            for: cue,
+                            playResX: playResX,
+                            playResY: playResY,
+                            enableOCRPositioning: enableOCRPositioning
+                        ),
                         plainText: cue.plainText,
                         frameRange: cue.frameRange,
                         attributes: cue.attributes
@@ -78,8 +86,14 @@ public enum ASSMerger {
         return SubtitleStyle(id: id, name: name, fields: fields)
     }
 
-    private static func assText(for cue: SubtitleCue, playResX: Int, playResY: Int) -> String {
+    private static func assText(
+        for cue: SubtitleCue,
+        playResX: Int,
+        playResY: Int,
+        enableOCRPositioning: Bool
+    ) -> String {
         guard
+            enableOCRPositioning,
             let prefix = OCRCuePosition.assOverridePrefix(
                 from: cue.attributes,
                 playResX: playResX,
