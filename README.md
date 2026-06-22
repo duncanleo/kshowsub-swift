@@ -3,7 +3,7 @@
 A macOS command-line tool that generates **ASS** subtitles from a video file by combining:
 
 - **Speech recognition** — transcribes dialogue (placed at the bottom of the frame).
-- **Vision OCR** — reads on-screen text such as logos and captions (placed at the top).
+- **Vision OCR** — reads on-screen text such as logos and captions (placed at the top by default, with optional positioned overlays).
 
 Both pipelines run in parallel. The result is a single merged subtitle file. You can optionally **translate** all cues to another locale using Apple Intelligence or the OpenAI-compatible (chat completions) provider.
 
@@ -53,6 +53,7 @@ KShowSub \
 
 - `--ocr-fps` — how many frames per second to sample for on-screen text (default **3**, range `1`–`120`). Higher values catch fast text at the cost of runtime.
 - `--ocr-profile` — OCR tuning preset: **`default`** or **`unfiltered`**. The default preset applies logo/watermark region filtering, frame similarity skipping, and text-size limits. **`unfiltered`** turns off region filtering and similar-frame skipping (useful when defaults drop too much text or for debugging).
+- `--position-ocr` — experimentally place OCR subtitles near their detected screen positions with limited dynamic font sizing. Generated ASS output still uses the standard 1920x1080 script resolution so dialogue subtitle scale and margins stay consistent with the default mode.
 
 ### Translation
 

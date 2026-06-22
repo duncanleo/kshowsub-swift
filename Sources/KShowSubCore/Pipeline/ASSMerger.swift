@@ -1,7 +1,7 @@
 import Foundation
 import SubtitleKit
 
-/// Builds an ASS SubtitleDocument with TopOCR (alignment 8) and BottomDialogue (alignment 2) styles,
+/// Builds an ASS SubtitleDocument with TopOCR and BottomDialogue styles,
 /// merging speech and OCR cues sorted by start time.
 public enum ASSMerger {
     private static let assFormatColumns = [
@@ -11,7 +11,7 @@ public enum ASSMerger {
         "Alignment", "MarginL", "MarginR", "MarginV", "Encoding",
     ]
 
-    /// TopOCR: beige (#F5F5DC) on black (alignment 8 = top center). MarginV = distance from top.
+    /// TopOCR: beige (#F5F5DC) on black. Positioned OCR cues override alignment with `\pos`.
     private static let topOCRStyleValues: [String] = [
         "TopOCR", "Arial", "48", "&H00DCF5F5", "&H00DCF5F5",
         "&H00000000", "&H00000000", "0", "0", "0", "0",
@@ -27,12 +27,28 @@ public enum ASSMerger {
         "2", "30", "30", "30", "1",
     ]
 
-    public static func merge(dialogueCues: [SubtitleCue], ocrCues: [SubtitleCue]) -> Subtitle {
-        merge(cues: (dialogueCues + ocrCues).sorted { $0.startTime < $1.startTime })
+    public static func merge(
+        dialogueCues: [SubtitleCue],
+        ocrCues: [SubtitleCue],
+        playResX: Int = OCRCuePosition.defaultPlayResX,
+        playResY: Int = OCRCuePosition.defaultPlayResY,
+        enableOCRPositioning: Bool = false
+    ) -> Subtitle {
+        merge(
+            cues: (dialogueCues + ocrCues).sorted { $0.startTime < $1.startTime },
+            playResX: playResX,
+            playResY: playResY,
+            enableOCRPositioning: enableOCRPositioning
+        )
     }
 
     /// Merge pre-sorted cues (e.g. after translation).
-    public static func merge(cues: [SubtitleCue]) -> Subtitle {
+    public static func merge(
+        cues: [SubtitleCue],
+        playResX: Int = OCRCuePosition.defaultPlayResX,
+        playResY: Int = OCRCuePosition.defaultPlayResY,
+        enableOCRPositioning: Bool = false
+    ) -> Subtitle {
         let topOCRStyle = makeStyle(id: 1, name: "TopOCR", values: topOCRStyleValues)
         let bottomDialogueStyle = makeStyle(
             id: 2, name: "BottomDialogue", values: bottomDialogueStyleValues)
@@ -48,7 +64,12 @@ public enum ASSMerger {
                         cueIdentifier: cue.cueIdentifier,
                         startTime: cue.startTime,
                         endTime: cue.endTime,
-                        rawText: cue.rawText,
+                        rawText: assText(
+                            for: cue,
+                            playResX: playResX,
+                            playResY: playResY,
+                            enableOCRPositioning: enableOCRPositioning
+                        ),
                         plainText: cue.plainText,
                         frameRange: cue.frameRange,
                         attributes: cue.attributes
@@ -63,5 +84,25 @@ public enum ASSMerger {
     private static func makeStyle(id: Int, name: String, values: [String]) -> SubtitleStyle {
         let fields = zip(assFormatColumns, values).map { SubtitleAttribute(key: $0.0, value: $0.1) }
         return SubtitleStyle(id: id, name: name, fields: fields)
+    }
+
+    private static func assText(
+        for cue: SubtitleCue,
+        playResX: Int,
+        playResY: Int,
+        enableOCRPositioning: Bool
+    ) -> String {
+        guard
+            enableOCRPositioning,
+            let prefix = OCRCuePosition.assOverridePrefix(
+                from: cue.attributes,
+                playResX: playResX,
+                playResY: playResY
+            ),
+            !cue.rawText.contains("\\pos(")
+        else {
+            return cue.rawText
+        }
+        return prefix + cue.rawText
     }
 }
