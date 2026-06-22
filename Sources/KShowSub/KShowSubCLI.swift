@@ -118,10 +118,7 @@ struct KShowSubCLI: AsyncParsableCommand {
         let resolvedLocale = Locale(identifier: locale)
         let transcriber = VideoSpeechTranscriber(locale: resolvedLocale)
         let ocrProcessor = OCRProcessor(positionedOverlays: positionOCR)
-        let playRes =
-            positionOCR
-            ? try await Self.videoPresentationResolution(videoURL: inputURL)
-            : (x: OCRCuePosition.defaultPlayResX, y: OCRCuePosition.defaultPlayResY)
+        let playRes = (x: OCRCuePosition.defaultPlayResX, y: OCRCuePosition.defaultPlayResY)
         let store = try JobStore(
             inputURL: inputURL, workDirOverride: workDir, resumeEnabled: resume)
         try await store.prepareWorkspace()
@@ -281,23 +278,6 @@ struct KShowSubCLI: AsyncParsableCommand {
         let duration = try await asset.load(.duration)
         let totalSeconds = CMTimeGetSeconds(duration)
         return max(1, Int(ceil(totalSeconds * Double(fps))))
-    }
-
-    private static func videoPresentationResolution(videoURL: URL) async throws -> (x: Int, y: Int) {
-        let asset = AVURLAsset(url: videoURL)
-        guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
-            return (OCRCuePosition.defaultPlayResX, OCRCuePosition.defaultPlayResY)
-        }
-
-        let naturalSize = try await videoTrack.load(.naturalSize)
-        let preferredTransform = try await videoTrack.load(.preferredTransform)
-        let transformed = naturalSize.applying(preferredTransform)
-        let width = abs(transformed.width) > 0 ? abs(transformed.width) : abs(naturalSize.width)
-        let height = abs(transformed.height) > 0 ? abs(transformed.height) : abs(naturalSize.height)
-        return (
-            max(1, Int(width.rounded())),
-            max(1, Int(height.rounded()))
-        )
     }
 
     private static func stageKey(parts: [String]) -> String {

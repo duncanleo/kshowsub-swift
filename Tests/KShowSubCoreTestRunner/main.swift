@@ -65,6 +65,7 @@ enum KShowSubCoreTestRunner {
             ("ASSMerger applies OCR position overrides", testASSMergerAppliesOCRPositionOverrides),
             ("ASSMerger applies clamped OCR font overrides", testASSMergerAppliesClampedOCRFontOverrides),
             ("OCRCuePosition derives normalized center", testOCRCuePositionDerivesNormalizedCenter),
+            ("OCRCuePosition does not match missing position to present position", testOCRCuePositionDoesNotMatchMissingPositionToPresentPosition),
             ("OCRProfile exposes named profiles", testOCRProfileNames),
             ("OCRProfile unfiltered disables filters", testOCRProfileUnfiltered),
             ("Media provider protocols accept stub implementations", testMediaProviderProtocolsAcceptStubs),
@@ -309,6 +310,14 @@ func testOCRCuePositionDerivesNormalizedCenter() throws {
 
     try expectEqual(String(format: "%.2f", center.x), "0.45")
     try expectEqual(String(format: "%.2f", center.y), "0.65")
+}
+
+func testOCRCuePositionDoesNotMatchMissingPositionToPresentPosition() throws {
+    let positioned = OCRCuePosition.Normalized(x: 0.25, y: 0.75)
+
+    try expect(OCRCuePosition.isNear(nil, nil), "Missing positions should match each other")
+    try expect(!OCRCuePosition.isNear(nil, positioned), "Missing position should not match placed text")
+    try expect(!OCRCuePosition.isNear(positioned, nil), "Placed text should not match missing position")
 }
 
 func testOCRProfileNames() throws {

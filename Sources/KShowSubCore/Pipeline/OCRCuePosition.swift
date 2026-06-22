@@ -80,13 +80,22 @@ public enum OCRCuePosition {
     }
 
     static func isNear(_ lhs: Normalized?, _ rhs: Normalized?) -> Bool {
-        distance(lhs, rhs) <= 0.05
+        switch (lhs, rhs) {
+        case (nil, nil):
+            return true
+        case (_?, nil), (nil, _?):
+            return false
+        case (let lhs?, let rhs?):
+            return distance(lhs, rhs) <= 0.05
+        }
     }
 
     static func distance(_ lhs: Normalized?, _ rhs: Normalized?) -> Double {
         switch (lhs, rhs) {
-        case (nil, nil), (_?, nil), (nil, _?):
+        case (nil, nil):
             return 0
+        case (_?, nil), (nil, _?):
+            return Double.greatestFiniteMagnitude
         case (let lhs?, let rhs?):
             let dx = lhs.x - rhs.x
             let dy = lhs.y - rhs.y

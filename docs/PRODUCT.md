@@ -12,9 +12,9 @@ KShowSub generates ASS subtitles from a video by combining speech transcription 
   avoid extreme tiny or oversized overlays. Older cached OCR text without bounding boxes falls
   back to the TopOCR style.
 - Output format is Advanced SubStation Alpha (`.ass`).
-- `PlayResX` and `PlayResY` are injected when absent so margins render predictably. The
-  positioned OCR mode uses the video presentation size; the default top-centered mode keeps the
-  historical 1920x1080 script resolution.
+- `PlayResX` and `PlayResY` are injected when absent so margins render predictably. Both default
+  and positioned OCR modes keep the historical 1920x1080 script resolution so dialogue subtitle
+  scale and margins stay consistent.
 
 ## Resume Behavior
 
