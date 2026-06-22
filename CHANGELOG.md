@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file. See [conven
 
 #### Features
 
+- position OCR overlays (#2) - ([d001dc4](https://github.com/duncanleo/kshowsub-swift/commit/d001dc49edf7be2a1e1085439143c65750cff6e8)) - Duncan Leo
+
+
+
+- - -
+
+
+#### Features
+
 - add speech and OCR provider protocols - ([5191089](https://github.com/duncanleo/kshowsub-swift/commit/51910897eb4a5b82e1f8a3a6f3525d28d2856d19)) - Duncan Leo
 
 - add --version flag and wire version into release workflow - ([b78469a](https://github.com/duncanleo/kshowsub-swift/commit/b78469a230100d504f50cb6552236e99a2224936)) - Duncan Leo, Claude Sonnet 4.6
