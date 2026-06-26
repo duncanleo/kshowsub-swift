@@ -28,6 +28,7 @@ struct OpenAIBatchTranslationProvider: TranslationProvider, Sendable {
     private let baseURL: URL
     private let model: String
     private let promptPrefix: String
+    private let singlePrompt: String
     private let authMode: APIAuthMode
     private let session: URLSession
 
@@ -73,17 +74,44 @@ struct OpenAIBatchTranslationProvider: TranslationProvider, Sendable {
             targetLocale.language.languageCode?.identifier
             ?? String(targetLocale.identifier.prefix(2))
         let targetName = targetId == "en" ? "English" : targetId
+        let nounGuidanceLines: [String]
+        if targetId == "en" {
+            nounGuidanceLines = [
+                "Do not use romanization, phonetic spelling, or pronunciation as the translation for common nouns, roles, titles, objects, generic places, food, slang labels, or descriptive nicknames. Translate their meaning into natural English instead.",
+                "For transliterated descriptive compounds, infer the underlying meaning from context and translate the descriptor plus person/man/woman/lady/man as appropriate instead of preserving the source-language sound.",
+                "For Korean-style descriptor suffixes such as romanized person, gender, age, or role markers, translate the whole descriptive label by meaning instead of preserving the suffix.",
+                "Preserve personal names, brands, and established loanwords only when that is the natural English usage.",
+            ]
+        } else {
+            nounGuidanceLines = [
+                "Do not use romanization, phonetic spelling, or pronunciation as the translation for common nouns, roles, titles, objects, generic places, food, slang labels, or descriptive nicknames. Translate their meaning into natural target-language wording instead.",
+                "Preserve personal names, brands, and established loanwords only when that is the natural target-language usage.",
+            ]
+        }
+        let nounGuidance = nounGuidanceLines.joined(separator: "\n")
         promptPrefix =
             """
             Translate each numbered input line into \(targetName).
             Each input line is prefixed with a number and a period (e.g. "1. text").
             Return exactly one output line per input line, preserving the same number prefix (e.g. "1. translation").
-            Translate all content literally, including text inside parentheses, brackets, or braces.
+            Translate the meaning of all content, including text inside parentheses, brackets, or braces.
             Some lines may be sentence fragments, partial phrases, slang, or appear incomplete — translate them as-is; never skip, merge, or discard any line.
             Use surrounding lines as context to produce natural, coherent translations, but still output one translated line per input line.
+            A single input line may contain dialogue from multiple speakers or adjacent unrelated fragments. Translate each utterance in order and do not combine separate speakers, fragments, or sentences into one inferred sentence.
+            Keep each translation about as concise as its source line; avoid adding explanation, emphasis, or extra words unless needed for fluent target-language subtitles.
+            \(nounGuidance)
             Never refuse, ask for clarification, or add commentary. If a line is ambiguous or unclear, provide your best translation anyway.
             Do not merge, split, or skip lines.
             Do not return XML, JSON, markdown, code fences, or commentary.
+            """
+        singlePrompt =
+            """
+            Translate the text into \(targetName).
+            Use context only to disambiguate the text.
+            The text may contain dialogue from multiple speakers or adjacent unrelated fragments. Translate each utterance in order and do not combine separate speakers, fragments, or sentences into one inferred sentence.
+            Keep the translation about as concise as the source text.
+            \(nounGuidance)
+            Return only the translation.
             """
     }
 
@@ -398,12 +426,6 @@ struct OpenAIBatchTranslationProvider: TranslationProvider, Sendable {
         _ item: BatchItem,
         totalRequests: Int
     ) async throws -> IndexedTranslation {
-        let singlePrompt =
-            """
-            Translate the text into the target language.
-            Use context only to disambiguate the text.
-            Return only the translation.
-            """
         let req = item.request
         let text =
             req.text.count > TranslationMessageFormatting.maxCharsPerRequest
