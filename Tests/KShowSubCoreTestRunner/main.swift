@@ -526,20 +526,23 @@ func testPostProcessingPromptIncludesKoreanShowGuidance() throws {
     try expect(prompt.contains("Korean shows"), "Expected Korean show subtitle guidance")
     try expect(prompt.contains("never more than two visual lines"), "Expected line-count guidance")
     try expect(prompt.contains("parentheses"), "Expected parenthetical on-screen text guidance")
-    try expect(prompt.contains("not summarization"), "Expected anti-summarization guidance")
-    try expect(prompt.contains("avoid overly sparse output"), "Expected density guidance")
+    try expect(prompt.contains("not scene summarization"), "Expected anti-summarization guidance")
+    try expect(prompt.contains("discern what should become the final subtitles"), "Expected final-subtitle selection guidance")
     try expect(
-        prompt.contains("If there are too many useful on-screen text pieces"),
-        "Expected on-screen text overload guidance")
-    try expect(prompt.contains("Split long speech") || prompt.contains("split or lightly polish"), "Expected long-sentence splitting guidance")
+        prompt.contains("preserve the on-screen text, rewrite it for readability, or distill"),
+        "Expected on-screen text preserve/rewrite/distill guidance")
     try expect(
-        prompt.contains("For each input cue whose kind is \"dialogue\""),
-        "Expected dialogue preservation guidance")
+        prompt.contains("decide whether it belongs in the final subtitle track"),
+        "Expected dialogue selection guidance")
     try expect(
-        prompt.contains("On-screen text is secondary to dialogue"), "Expected dialogue-over-on-screen priority guidance")
+        prompt.contains("You may drop dialogue"),
+        "Expected dialogue dropping guidance")
     try expect(
-        prompt.contains("Preserve on-screen text that is not present in dialogue"),
-        "Expected unique on-screen text preservation guidance")
+        prompt.contains("must be wrapped in parentheses"),
+        "Expected parenthesized on-screen text contract")
+    try expect(
+        prompt.contains("Avoid overly sparse output"),
+        "Expected density guardrail")
     try expect(
         applePrompt.count < prompt.count, "Expected Apple Intelligence prompt to be more compact")
 }

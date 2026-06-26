@@ -23,12 +23,12 @@ enum PostProcessingPrompt {
         Edit Korean-show subtitles from a batch of timestamped cues in \(language).
         Return one unified bottom subtitle track. This is cleanup, not summarization.
         Inputs include context that identifies dialogue cues and on-screen text cues.
-        Keep every meaningful dialogue cue unless duplicate or garbage.
-        Never drop dialogue just to make output shorter.
+        Decide what the final viewer subtitle track should contain from both dialogue and on-screen text.
+        Dialogue may be preserved, lightly rewritten, merged, or dropped when it is redundant, non-meaningful, or not useful as a final subtitle.
         Keep text short: one line preferred, two lines maximum.
-        On-screen text is not dialogue; include useful on-screen text only in parentheses, e.g. "(caption: ...)" or "(sign: ...)".
-        Preserve on-screen text when it contains unique information not spoken in dialogue.
-        If there is too much on-screen text, keep or summarize the unique useful parts in one short parenthetical cue.
+        On-screen text is not dialogue; preserve, rewrite, or distill useful on-screen context only in parentheses, e.g. "(caption: ...)" or "(sign: ...)".
+        Preserve or rewrite on-screen text when it contains unique information not spoken in dialogue.
+        If there is too much on-screen text, distill the unique useful parts in one short parenthetical cue.
         Drop logos, watermarks, decorative captions, repeated on-screen text, and noise.
         Preserve timestamps and chronology.
         Return only JSON: {"cues":[{"startTime":0,"endTime":1000,"text":"..."}]}.
@@ -41,14 +41,17 @@ enum PostProcessingPrompt {
         Inputs are batches of timestamped cues from the same video in \(language).
         Each batch contains explicit context: which cues are dialogue, which cues are on-screen text, and which cues overlap in time.
         Produce one readable, unified bottom subtitle track optimized for viewers.
-        This is subtitle cleanup, not summarization.
-        Output should remain dense enough to follow the scene moment by moment.
-        Preserve every meaningful dialogue line unless it is a clear duplicate or recognition garbage.
-        For each input cue whose kind is "dialogue", produce an output cue unless that dialogue is a duplicate of nearby dialogue or obvious recognition garbage.
-        Prefer false positives over false negatives for dialogue: if unsure, keep it.
-        Do not remove dialogue words merely because the sentence is long; split or lightly polish instead.
-        Do not collapse multiple dialogue turns into a summary.
-        When unsure whether dialogue is meaningful, keep it.
+        The job is to discern what should become the final subtitles from both dialogue and on-screen text.
+        This is editorial subtitle distillation, not scene summarization.
+        Output should remain dense enough to follow the scene moment by moment, but it does not need to preserve every input cue.
+
+        Dialogue:
+        Dialogue is the main subtitle text and must not be wrapped in parentheses.
+        For each input cue whose kind is "dialogue", decide whether it belongs in the final subtitle track.
+        Preserve or lightly rewrite dialogue when it carries meaning, tone, turn-taking, plot, jokes, reactions, or information viewers need.
+        You may drop dialogue when it is redundant with nearby dialogue or on-screen text, filler, false recognition, repeated, non-meaningful, or not useful as a viewer subtitle.
+        Do not remove dialogue merely because the sentence is long; split or lightly polish instead.
+        Do not collapse multiple meaningful dialogue turns into a scene summary.
 
         Readability:
         Keep each subtitle short enough to read at video speed.
@@ -58,20 +61,19 @@ enum PostProcessingPrompt {
         Remove filler only when it does not change the speaker's meaning or tone.
         If shortening a cue would remove meaning, keep the longer wording.
 
-        Dialogue vs on-screen text:
-        Dialogue is the main subtitle text and must not be wrapped in parentheses.
+        On-screen text:
         On-screen text is different from dialogue and must be wrapped in parentheses.
         Use concise labels for on-screen text when helpful: "(caption: ...)", "(sign: ...)", "(phone: ...)", "(name tag: ...)".
+        For each input cue whose kind is "onScreen", decide whether it adds final-subtitle value.
+        You may preserve the on-screen text, rewrite it for readability, or distill several on-screen cues into concise context.
+        Useful on-screen text includes captions that explain jokes, reactions, speaker labels, rankings/scores, missions, signs, phone/chat text, or plot context.
         If an output cue combines dialogue and useful on-screen text, put dialogue first and on-screen text after it in parentheses only if it still fits within two lines.
-        If dialogue and on-screen text say the same thing, keep only the dialogue.
-
-        Handling excessive on-screen text:
+        If dialogue and on-screen text communicate the same meaning, keep only the dialogue.
         Korean shows often display many simultaneous captions, labels, banners, score bugs, or decorative text.
         Do not include every on-screen text fragment.
         On-screen text is secondary to dialogue, but it is not disposable when it carries unique information.
-        Preserve on-screen text that is not present in dialogue and helps the viewer understand who/what/where/why.
+        Preserve, rewrite, or distill on-screen text that is not present in dialogue and helps the viewer understand who/what/where/why.
         Keep on-screen text only when it adds meaning, emotion, speaker context, jokes, labels, signs, chats, or plot-relevant information.
-        Preserve unique captions that explain jokes, reactions, speaker labels, rankings/scores, missions, signs, phone/chat text, or plot context.
         If there are too many useful on-screen text pieces at once, keep the most important unique item or summarize the unique useful parts in one short parenthetical cue.
         Drop on-screen text only when it is decorative, redundant with dialogue, repeated nearby, a logo/watermark, a production label, or recognition noise.
         Drop logos, watermarks, repeated decoration, production labels, recognition noise, and partial garbage text.
@@ -81,8 +83,8 @@ enum PostProcessingPrompt {
         Use overlap context to decide when dialogue and on-screen text should become one bottom cue instead of simultaneous stacked subtitles.
         If merging adjacent dialogue cues, preserve the meaning of every merged dialogue cue.
         Do not stack dialogue and on-screen text as separate simultaneous subtitles.
-        It is acceptable for the output cue count to be close to the input dialogue cue count; avoid overly sparse output.
-        A good output usually has nearly as many dialogue cues as meaningful input dialogue cues.
+        The output cue count can be lower than the input cue count when the final subtitles are clearer that way.
+        Avoid overly sparse output that loses moment-by-moment meaning.
         Preserve chronology and millisecond timestamps. You may extend a cue only enough to cover merged source cues.
         If the input is already English, output polished English. If the input is Korean or mixed Korean/English, preserve the source meaning cleanly so a later translation step can translate it naturally.
         Return only JSON: {"cues":[{"startTime":0,"endTime":1000,"text":"..."}]}.
