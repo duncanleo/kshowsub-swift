@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file. See [conven
 
 #### Features
 
+- add Apple Translation progress - ([647077f](https://github.com/duncanleo/kshowsub-swift/commit/647077fd9f8468e5c3f9c0fe6f95a477d5b90adb)) - Duncan Leo, OpenAI Codex
+
+
+#### Bug Fixes
+
+- refine OpenAI subtitle translation prompt - ([ba3bdef](https://github.com/duncanleo/kshowsub-swift/commit/ba3bdeff84595c8a3695af61f7471f969a38e1a4)) - Duncan Leo, Codex
+
+- refine positioned OCR collision avoidance - ([cdf5fd8](https://github.com/duncanleo/kshowsub-swift/commit/cdf5fd86690efa202efe5d904ff899bd4c7ae062)) - Duncan Leo, Codex
+
+
+#### Documentation
+
+- document co-author commit trailer - ([184ec1a](https://github.com/duncanleo/kshowsub-swift/commit/184ec1abf99ed572808a92027bb94154851e4dc6)) - Duncan Leo, OpenAI Codex
+
+
+#### Miscellaneous Chores
+
+- ignore .env - ([2b02e7b](https://github.com/duncanleo/kshowsub-swift/commit/2b02e7b4a5826ad2fe6825f62b9869ee22eadce3)) - Duncan Leo
+
+
+
+- - -
+
+
+#### Features
+
 - position OCR overlays (#2) - ([d001dc4](https://github.com/duncanleo/kshowsub-swift/commit/d001dc49edf7be2a1e1085439143c65750cff6e8)) - Duncan Leo
 
 
