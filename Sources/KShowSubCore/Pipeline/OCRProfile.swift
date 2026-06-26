@@ -18,6 +18,11 @@ public struct OCRProfile: Sendable {
     /// Set to `false` to run OCR on every sampled frame.
     public var skipSimilarFrames: Bool
 
+    /// When `true`, OCR observations are kept only when similar text appears in a
+    /// nearby sampled frame at roughly the same position. This reduces one-off OCR
+    /// hits from shirts, signs, and background texture.
+    public var filterTransientObservations: Bool
+
     // MARK: - Frame sampling
 
     /// Max Vision OCR requests to run concurrently.
@@ -37,6 +42,18 @@ public struct OCRProfile: Sendable {
     /// Normalized Levenshtein distance (0…1) below which a new OCR result is
     /// replaced with the previous one (minor OCR noise / punctuation drift).
     public var textSimilarityReuseThreshold: Float
+
+    /// Bounding-box intersection-over-union threshold for temporal observation matching.
+    public var transientObservationIOUThreshold: Float
+
+    /// Maximum normalized center-point distance for temporal observation matching.
+    public var transientObservationCenterDistanceThreshold: Float
+
+    /// Number of neighboring-frame matches required to keep an OCR observation.
+    public var transientObservationMinNeighborMatches: Int
+
+    /// Number of sampled frames before/after the current frame to search for matches.
+    public var transientObservationNeighborWindow: Int
 
     // MARK: - Text height / size
 
@@ -120,10 +137,15 @@ public struct OCRProfile: Sendable {
     public init(
         filterLogoRegions: Bool = true,
         skipSimilarFrames: Bool = true,
+        filterTransientObservations: Bool = true,
         maxConcurrentOCRFrames: Int = 4,
         frameSimilarityFingerprintSize: Int = 32,
         frameSimilaritySkipThreshold: Float = 0.03,
         textSimilarityReuseThreshold: Float = 0.2,
+        transientObservationIOUThreshold: Float = 0.2,
+        transientObservationCenterDistanceThreshold: Float = 0.12,
+        transientObservationMinNeighborMatches: Int = 1,
+        transientObservationNeighborWindow: Int = 2,
         minimumRecognizedTextHeight: Float = 0.02,
         parenthesesAreaThreshold: CGFloat = 0.0055,
         maximumSkewDegrees: Double = 5,
@@ -136,10 +158,15 @@ public struct OCRProfile: Sendable {
     ) {
         self.filterLogoRegions = filterLogoRegions
         self.skipSimilarFrames = skipSimilarFrames
+        self.filterTransientObservations = filterTransientObservations
         self.maxConcurrentOCRFrames = maxConcurrentOCRFrames
         self.frameSimilarityFingerprintSize = frameSimilarityFingerprintSize
         self.frameSimilaritySkipThreshold = frameSimilaritySkipThreshold
         self.textSimilarityReuseThreshold = textSimilarityReuseThreshold
+        self.transientObservationIOUThreshold = transientObservationIOUThreshold
+        self.transientObservationCenterDistanceThreshold = transientObservationCenterDistanceThreshold
+        self.transientObservationMinNeighborMatches = transientObservationMinNeighborMatches
+        self.transientObservationNeighborWindow = transientObservationNeighborWindow
         self.minimumRecognizedTextHeight = minimumRecognizedTextHeight
         self.parenthesesAreaThreshold = parenthesesAreaThreshold
         self.maximumSkewDegrees = maximumSkewDegrees
@@ -161,7 +188,8 @@ public struct OCRProfile: Sendable {
     /// is OCR'd.  Useful for debugging or content where the defaults discard too much.
     public static let unfiltered = OCRProfile(
         filterLogoRegions: false,
-        skipSimilarFrames: false
+        skipSimilarFrames: false,
+        filterTransientObservations: false
     )
 
     // MARK: - Lookup by name

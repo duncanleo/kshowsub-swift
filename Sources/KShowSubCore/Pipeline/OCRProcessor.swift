@@ -91,30 +91,16 @@ public actor OCRProcessor: VideoOCRProcessing {
 
         let cachedRecords = existingFrameRecords.prefix { $0.index < frameCount }
         let resumeIndex = cachedRecords.count
-        var frameResults: [OCRFrameText] = cachedRecords.flatMap { record in
-            if let obs = record.observations {
-                return Self.frameTexts(
-                    from: obs,
-                    index: record.index,
-                    imageHeight: imageHeight,
-                    profile: profile,
-                    positionedOverlays: positionedOverlays
-                )
-            } else {
-                return record.recognizedText.isEmpty
-                    ? []
-                    : [
-                        OCRFrameText(
-                            index: record.index,
-                            text: record.recognizedText,
-                            position: nil,
-                            fontHeight: nil)
-                    ]
-            }
-        }
+        var frameRecords = Array(cachedRecords)
 
         if resumeIndex >= frameCount {
             logger.info("OCR: refiltering \(frameCount) cached frames...")
+            let frameResults = Self.frameResults(
+                from: frameRecords,
+                imageHeight: imageHeight,
+                profile: profile,
+                positionedOverlays: positionedOverlays
+            )
             return mergeFrameTexts(
                 frameResults: frameResults,
                 totalSeconds: totalSeconds,
@@ -202,42 +188,23 @@ public actor OCRProcessor: VideoOCRProcessing {
                 if let lastRecord = flushed.last {
                     lastObservations = lastRecord.observations
                 }
-                frameResults.append(contentsOf:
-                    flushedRecords.flatMap { record -> [OCRFrameText] in
-                        guard let obs = record.observations else { return [] }
-                        return Self.frameTexts(
-                            from: obs,
-                            index: record.index,
-                            imageHeight: imageHeight,
-                            profile: profile,
-                            positionedOverlays: positionedOverlays
-                        )
-                    })
+                frameRecords.append(contentsOf: flushedRecords)
                 if let persistRecords {
                     try await persistRecords(flushedRecords)
                 }
                 pendingOCRFrames.removeAll(keepingCapacity: true)
 
-                frameResults.append(contentsOf:
-                    Self.frameTexts(
-                        from: lastObservations,
-                        index: k,
-                        imageHeight: imageHeight,
-                        profile: profile,
-                        positionedOverlays: positionedOverlays
-                    )
+                let reusedRecord = OCRFrameRecord(
+                    index: k,
+                    sampleTimeSeconds: seconds,
+                    recognizedText: "",
+                    observations: lastObservations,
+                    reusedPreviousText: true,
+                    fingerprint: currFingerprint
                 )
+                frameRecords.append(reusedRecord)
                 if let persistRecords {
-                    try await persistRecords([
-                        OCRFrameRecord(
-                            index: k,
-                            sampleTimeSeconds: seconds,
-                            recognizedText: "",
-                            observations: lastObservations,
-                            reusedPreviousText: true,
-                            fingerprint: currFingerprint
-                        )
-                    ])
+                    try await persistRecords([reusedRecord])
                 }
             } else {
                 pendingOCRFrames.append(
@@ -257,17 +224,7 @@ public actor OCRProcessor: VideoOCRProcessing {
                     if let lastRecord = flushed.last {
                         lastObservations = lastRecord.observations
                     }
-                    frameResults.append(contentsOf:
-                        flushedRecords.flatMap { record -> [OCRFrameText] in
-                            guard let obs = record.observations else { return [] }
-                            return Self.frameTexts(
-                                from: obs,
-                                index: record.index,
-                                imageHeight: imageHeight,
-                                profile: profile,
-                                positionedOverlays: positionedOverlays
-                            )
-                        })
+                    frameRecords.append(contentsOf: flushedRecords)
                     if let persistRecords {
                         try await persistRecords(flushedRecords)
                     }
@@ -289,21 +246,17 @@ public actor OCRProcessor: VideoOCRProcessing {
                 fingerprint: item.fingerprint
             )
         }
-        frameResults.append(contentsOf:
-            flushedRecords.flatMap { record -> [OCRFrameText] in
-                guard let obs = record.observations else { return [] }
-                return Self.frameTexts(
-                    from: obs,
-                    index: record.index,
-                    imageHeight: imageHeight,
-                    profile: profile,
-                    positionedOverlays: positionedOverlays
-                )
-            })
+        frameRecords.append(contentsOf: flushedRecords)
         if let persistRecords {
             try await persistRecords(flushedRecords)
         }
 
+        let frameResults = Self.frameResults(
+            from: frameRecords,
+            imageHeight: imageHeight,
+            profile: profile,
+            positionedOverlays: positionedOverlays
+        )
         return mergeFrameTexts(
             frameResults: frameResults, totalSeconds: totalSeconds, fps: fps, profile: profile)
     }
@@ -452,28 +405,80 @@ public actor OCRProcessor: VideoOCRProcessing {
         }
     }
 
-    private static func frameTexts(
-        from observations: [OCRTextObservation],
-        index: Int,
+    static func frameResults(
+        from records: [OCRFrameRecord],
+        imageHeight: Double,
+        profile: OCRProfile
+    ) -> [(Int, String)] {
+        Self.frameResults(
+            from: records,
+            imageHeight: imageHeight,
+            profile: profile,
+            positionedOverlays: false
+        ).map { ($0.index, $0.text) }
+    }
+
+    private static func frameResults(
+        from records: [OCRFrameRecord],
         imageHeight: Double,
         profile: OCRProfile,
         positionedOverlays: Bool
     ) -> [OCRFrameText] {
-        if positionedOverlays {
-            return positionedFrameTexts(
-                observations, index: index, imageHeight: imageHeight, profile: profile)
+        let observationsByFrame: [Int: [OCRTextObservation]]
+        if profile.filterTransientObservations {
+            observationsByFrame = temporallyFilteredObservations(
+                records: records, imageHeight: imageHeight, profile: profile)
+        } else {
+            observationsByFrame = Dictionary(
+                uniqueKeysWithValues: records.compactMap { record in
+                    guard let observations = record.observations else { return nil }
+                    return (
+                        record.index,
+                        filteredObservations(observations, imageHeight: imageHeight, profile: profile)
+                    )
+                }
+            )
         }
-        return joinedFrameText(observations, index: index, imageHeight: imageHeight, profile: profile)
+
+        return records.flatMap { record -> [OCRFrameText] in
+            if record.observations != nil {
+                return frameTexts(
+                    from: observationsByFrame[record.index] ?? [],
+                    index: record.index,
+                    profile: profile,
+                    positionedOverlays: positionedOverlays
+                )
+            }
+            return record.recognizedText.isEmpty
+                ? []
+                : [
+                    OCRFrameText(
+                        index: record.index,
+                        text: record.recognizedText,
+                        position: nil,
+                        fontHeight: nil)
+                ]
+        }
+    }
+
+    private static func frameTexts(
+        from observations: [OCRTextObservation],
+        index: Int,
+        profile: OCRProfile,
+        positionedOverlays: Bool
+    ) -> [OCRFrameText] {
+        if positionedOverlays {
+            return positionedFrameTexts(observations, index: index, profile: profile)
+        }
+        return joinedFrameText(observations, index: index, profile: profile)
     }
 
     private static func positionedFrameTexts(
         _ observations: [OCRTextObservation],
         index: Int,
-        imageHeight: Double,
         profile: OCRProfile
     ) -> [OCRFrameText] {
-        let filtered = filteredObservations(observations, imageHeight: imageHeight, profile: profile)
-        return filtered.map { obs in
+        observations.map { obs in
             OCRFrameText(
                 index: index,
                 text: displayText(for: obs, profile: profile),
@@ -486,11 +491,9 @@ public actor OCRProcessor: VideoOCRProcessing {
     private static func joinedFrameText(
         _ observations: [OCRTextObservation],
         index: Int,
-        imageHeight: Double,
         profile: OCRProfile
     ) -> [OCRFrameText] {
-        let filtered = filteredObservations(observations, imageHeight: imageHeight, profile: profile)
-        let text = filtered.map { displayText(for: $0, profile: profile) }.joined(separator: "\\N")
+        let text = observations.map { displayText(for: $0, profile: profile) }.joined(separator: "\\N")
         guard !text.isEmpty else { return [] }
         return [OCRFrameText(index: index, text: text, position: nil, fontHeight: nil)]
     }
@@ -498,6 +501,57 @@ public actor OCRProcessor: VideoOCRProcessing {
     private static func displayText(for obs: OCRTextObservation, profile: OCRProfile) -> String {
         let area = obs.boundingBoxWidth * obs.boundingBoxHeight
         return area < Double(profile.parenthesesAreaThreshold) ? "(\(obs.text))" : obs.text
+    }
+
+    private static func temporallyFilteredObservations(
+        records: [OCRFrameRecord],
+        imageHeight: Double,
+        profile: OCRProfile
+    ) -> [Int: [OCRTextObservation]] {
+        let frames = records.compactMap { record -> (index: Int, observations: [OCRTextObservation])? in
+            guard let observations = record.observations else { return nil }
+            return (
+                record.index,
+                filteredObservations(observations, imageHeight: imageHeight, profile: profile)
+            )
+        }
+        guard frames.count > 1 else {
+            return Dictionary(uniqueKeysWithValues: frames.map { ($0.index, $0.observations) })
+        }
+
+        var kept: [Int: [OCRTextObservation]] = [:]
+        let requiredMatches = max(1, profile.transientObservationMinNeighborMatches)
+        let neighborWindow = max(1, profile.transientObservationNeighborWindow)
+        for offset in frames.indices {
+            let frame = frames[offset]
+            let lowerBound = max(frames.startIndex, offset - neighborWindow)
+            let upperBound = min(frames.index(before: frames.endIndex), offset + neighborWindow)
+            let neighboringOffsets = (lowerBound...upperBound).filter { $0 != offset }
+            kept[frame.index] = frame.observations.filter { observation in
+                var matches = 0
+                for neighborOffset in neighboringOffsets {
+                    if frames[neighborOffset].observations.contains(where: { other in
+                        normalizedOCRText(observation.text) == normalizedOCRText(other.text)
+                            && observationsTemporallyMatch(observation, other, profile: profile)
+                    }) {
+                        matches += 1
+                    }
+                }
+                return matches >= requiredMatches
+            }
+        }
+        return kept
+    }
+
+    private static func filterAndJoin(
+        _ observations: [OCRTextObservation],
+        imageHeight: Double,
+        profile: OCRProfile
+    ) -> String {
+        joinObservations(
+            filteredObservations(observations, imageHeight: imageHeight, profile: profile),
+            profile: profile
+        )
     }
 
     private static func filteredObservations(
@@ -541,6 +595,53 @@ public actor OCRProcessor: VideoOCRProcessing {
             filtered = observations
         }
         return filtered
+    }
+
+    private static func joinObservations(
+        _ observations: [OCRTextObservation],
+        profile: OCRProfile
+    ) -> String {
+        let lines = observations.map { obs -> String in
+            let area = obs.boundingBoxWidth * obs.boundingBoxHeight
+            return area < Double(profile.parenthesesAreaThreshold) ? "(\(obs.text))" : obs.text
+        }
+        return lines.joined(separator: "\\N")
+    }
+
+    private static func normalizedOCRText(_ text: String) -> String {
+        text.lowercased().filter { !$0.isWhitespace }
+    }
+
+    private static func boundingBoxIOU(_ a: OCRTextObservation, _ b: OCRTextObservation) -> Float {
+        let aRect = CGRect(
+            x: a.boundingBoxX, y: a.boundingBoxY,
+            width: a.boundingBoxWidth, height: a.boundingBoxHeight)
+        let bRect = CGRect(
+            x: b.boundingBoxX, y: b.boundingBoxY,
+            width: b.boundingBoxWidth, height: b.boundingBoxHeight)
+        let intersection = aRect.intersection(bRect)
+        guard !intersection.isNull else { return 0 }
+        let intersectionArea = intersection.width * intersection.height
+        let unionArea = aRect.width * aRect.height + bRect.width * bRect.height - intersectionArea
+        guard unionArea > 0 else { return 0 }
+        return Float(intersectionArea / unionArea)
+    }
+
+    private static func observationsTemporallyMatch(
+        _ a: OCRTextObservation,
+        _ b: OCRTextObservation,
+        profile: OCRProfile
+    ) -> Bool {
+        if boundingBoxIOU(a, b) >= profile.transientObservationIOUThreshold {
+            return true
+        }
+        return centerDistance(a, b) <= profile.transientObservationCenterDistanceThreshold
+    }
+
+    private static func centerDistance(_ a: OCRTextObservation, _ b: OCRTextObservation) -> Float {
+        let dx = (a.boundingBoxX + a.boundingBoxWidth / 2) - (b.boundingBoxX + b.boundingBoxWidth / 2)
+        let dy = (a.boundingBoxY + a.boundingBoxHeight / 2) - (b.boundingBoxY + b.boundingBoxHeight / 2)
+        return Float((dx * dx + dy * dy).squareRoot())
     }
 
     /// Normalized Levenshtein distance between two strings, in 0…1 (0 = identical, 1 = nothing in common).
