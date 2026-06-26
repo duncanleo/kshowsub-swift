@@ -87,6 +87,10 @@ enum KShowSubCoreTestRunner {
             ),
             ("TranslationMessageFormatting includes context markers", testMessageWithContext),
             ("TranslationMessageFormatting truncates long text", testMessageTruncatesLongText),
+            (
+                "SubtitleTranslator normalizes translated presentation",
+                testSubtitleTranslatorNormalizesTranslatedPresentation
+            ),
             ("SpeechCueMerger merges nearby words", testSpeechCueMergerMergesNearbyWords),
             ("SpeechCueMerger splits on pause", testSpeechCueMergerSplitsOnPause),
             ("SpeechCueMerger wraps long cues", testSpeechCueMergerWrapsLongCue),
@@ -277,6 +281,45 @@ func testMessageTruncatesLongText() throws {
     let message = TranslationMessageFormatting.userMessageText(for: request)
 
     try expectEqual(message.count, TranslationMessageFormatting.maxCharsPerRequest)
+}
+
+func testSubtitleTranslatorNormalizesTranslatedPresentation() async throws {
+    let cues = [
+        SubtitleCue(
+            id: 1,
+            startTime: 0,
+            endTime: 3_000,
+            rawText: "source",
+            plainText: "source",
+            attributes: [SubtitleAttribute(key: "Style", value: "BottomDialogue")]
+        )
+    ]
+    let provider = StubTranslationProvider(
+        translations: [
+            "It is the Cheongwaj probability because the tide did not end. The dog is missing (Heavy Rain Advisory) and cannot enter Jeju (Udo)."
+        ]
+    )
+
+    let translated = try await SubtitleTranslator(provider: provider).translate(cues)
+    let lines = renderedLines(from: translated)
+
+    try expect(translated.count > 1, "Expected wordy translation to split into multiple cues")
+    try expect(
+        translated.allSatisfy { $0.plainText.count <= 84 || $0.plainText.hasPrefix("(") },
+        "Expected translated cues to stay compact"
+    )
+    try expect(
+        lines.contains { $0.hasPrefix("(") && $0.localizedCaseInsensitiveContains("heavy rain") },
+        "Expected translated warning parenthetical on its own line"
+    )
+    try expect(
+        lines.contains { $0.hasPrefix("(") && $0.localizedCaseInsensitiveContains("udo") },
+        "Expected translated place parenthetical on its own line"
+    )
+    try expect(
+        lines.allSatisfy { !$0.contains("(") || $0.hasPrefix("(") },
+        "Expected translated parentheticals not to be embedded inside dialogue lines"
+    )
 }
 
 func testSpeechCueMergerMergesNearbyWords() throws {
@@ -1100,6 +1143,22 @@ private struct StubPostProcessingProvider: SubtitlePostProcessingProvider {
 
     func postProcess(_ batch: PostProcessingInputBatch) async throws -> [PostProcessedCue] {
         outputs
+    }
+}
+
+private struct StubTranslationProvider: TranslationProvider {
+    static let id = "translation-stub"
+    static let displayName = "Translation Stub"
+
+    let translations: [String]
+
+    func translate(_ requests: [TranslationRequest]) async throws -> [String] {
+        Array(translations.prefix(requests.count))
+            + Array(repeating: "", count: max(0, requests.count - translations.count))
+    }
+
+    func estimateCost(for requests: [TranslationRequest]) -> TranslationCostEstimate {
+        TranslationCostEstimate(estimatedUSD: 0, lines: [])
     }
 }
 
