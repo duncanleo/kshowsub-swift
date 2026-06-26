@@ -7,6 +7,8 @@ struct AppleTranslationProvider: TranslationProvider, Sendable {
     static let id = "apple-translation"
     static let displayName = "Apple Translation"
 
+    private static let maxRequestsPerBatch = 50
+
     private let sourceLanguage: Locale.Language
     private let targetLanguage: Locale.Language
 
@@ -61,18 +63,36 @@ struct AppleTranslationProvider: TranslationProvider, Sendable {
         }
 
         let session = TranslationSession(installedSource: sourceLanguage, target: targetLanguage)
-
-        let sessionRequests = requests.enumerated().map { idx, req in
-            TranslationSession.Request(sourceText: req.text, clientIdentifier: String(idx))
-        }
-
-        let responses = try await session.translations(from: sessionRequests)
-
         var results = Array(repeating: "", count: requests.count)
-        for response in responses {
-            guard let idStr = response.clientIdentifier, let idx = Int(idStr) else { continue }
-            results[idx] = response.targetText
+        let progress = TranslationProgressReporter(
+            label: Self.displayName,
+            total: requests.count,
+            unitLabel: "lines",
+            inFlightLabel: "batches in flight"
+        )
+
+        await progress.start()
+
+        for batchStart in stride(from: 0, to: requests.count, by: Self.maxRequestsPerBatch) {
+            let batchEnd = min(batchStart + Self.maxRequestsPerBatch, requests.count)
+            let sessionRequests = requests[batchStart..<batchEnd].enumerated().map { offset, req in
+                TranslationSession.Request(
+                    sourceText: req.text,
+                    clientIdentifier: String(batchStart + offset)
+                )
+            }
+
+            await progress.markStarted()
+            let responses = try await session.translations(from: sessionRequests)
+
+            for response in responses {
+                guard let idStr = response.clientIdentifier, let idx = Int(idStr) else { continue }
+                results[idx] = response.targetText
+            }
+            await progress.markCompleted(count: batchEnd - batchStart)
         }
+
+        await progress.finish()
         return results
     }
 }
