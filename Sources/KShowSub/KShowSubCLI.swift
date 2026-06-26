@@ -23,7 +23,7 @@ struct KShowSubCLI: AsyncParsableCommand {
         abstract:
             "Generate ASS subtitles from video using Speech (dialogue) and Vision OCR (on-screen text).",
         discussion:
-            "Runs speech recognition and OCR in parallel, then merges both into a single ASS file. Optional LLM post-processing can reduce OCR/speech overlap into one bottom subtitle track before translation.",
+            "Runs speech recognition and OCR in parallel, then merges both into a single ASS file. Optional LLM post-processing can unify dialogue and on-screen text into one bottom subtitle track before translation.",
         version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
     )
 
@@ -90,7 +90,7 @@ struct KShowSubCLI: AsyncParsableCommand {
     )
     var translateProvider: String = "apple-intelligence"
 
-    @Flag(name: .long, help: "Use an LLM to reduce OCR and speech cues into one bottom subtitle track before translation.")
+    @Flag(name: .long, help: "Use an LLM to unify dialogue and on-screen text cues into one bottom subtitle track before translation.")
     var postProcess: Bool = false
 
     @Option(

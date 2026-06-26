@@ -128,6 +128,10 @@ enum KShowSubCoreTestRunner {
                 testSubtitlePostProcessorReturnsBottomDialogueCues
             ),
             (
+                "SubtitlePostProcessor passes cue role and overlap context",
+                testSubtitlePostProcessorPassesCueRoleAndOverlapContext
+            ),
+            (
                 "SubtitlePostProcessor chunks limited providers",
                 testSubtitlePostProcessorChunksLimitedProviders
             ),
@@ -521,21 +525,21 @@ func testPostProcessingPromptIncludesKoreanShowGuidance() throws {
 
     try expect(prompt.contains("Korean shows"), "Expected Korean show subtitle guidance")
     try expect(prompt.contains("never more than two visual lines"), "Expected line-count guidance")
-    try expect(prompt.contains("parentheses"), "Expected parenthetical OCR guidance")
+    try expect(prompt.contains("parentheses"), "Expected parenthetical on-screen text guidance")
     try expect(prompt.contains("not summarization"), "Expected anti-summarization guidance")
     try expect(prompt.contains("avoid overly sparse output"), "Expected density guidance")
     try expect(
         prompt.contains("If there are too many useful on-screen text pieces"),
-        "Expected OCR overload guidance")
-    try expect(prompt.contains("Split long speech"), "Expected long-sentence splitting guidance")
+        "Expected on-screen text overload guidance")
+    try expect(prompt.contains("Split long speech") || prompt.contains("split or lightly polish"), "Expected long-sentence splitting guidance")
     try expect(
-        prompt.contains("For each input cue whose source is \"speech\""),
-        "Expected speech preservation guidance")
+        prompt.contains("For each input cue whose kind is \"dialogue\""),
+        "Expected dialogue preservation guidance")
     try expect(
-        prompt.contains("OCR is secondary to speech"), "Expected speech-over-OCR priority guidance")
+        prompt.contains("On-screen text is secondary to dialogue"), "Expected dialogue-over-on-screen priority guidance")
     try expect(
-        prompt.contains("Preserve OCR that is not present in dialogue"),
-        "Expected unique OCR preservation guidance")
+        prompt.contains("Preserve on-screen text that is not present in dialogue"),
+        "Expected unique on-screen text preservation guidance")
     try expect(
         applePrompt.count < prompt.count, "Expected Apple Intelligence prompt to be more compact")
 }
@@ -649,6 +653,53 @@ func testSubtitlePostProcessorReturnsBottomDialogueCues() async throws {
         processed[0].attributes.contains { $0.key == "Style" && $0.value == "BottomDialogue" },
         "Expected post-processed cues to use bottom dialogue style"
     )
+}
+
+func testSubtitlePostProcessorPassesCueRoleAndOverlapContext() async throws {
+    let cues = [
+        SubtitleCue(
+            id: 1,
+            startTime: 0,
+            endTime: 800,
+            rawText: "Wait",
+            plainText: "Wait",
+            attributes: [SubtitleAttribute(key: "Style", value: "BottomDialogue")]
+        ),
+        SubtitleCue(
+            id: 2,
+            startTime: 250,
+            endTime: 700,
+            rawText: "Warning",
+            plainText: "Warning",
+            attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+        ),
+        SubtitleCue(
+            id: 3,
+            startTime: 900,
+            endTime: 1200,
+            rawText: "mystery",
+            plainText: "mystery",
+            attributes: []
+        ),
+    ]
+    let recorder = PostProcessingBatchRecorder()
+    let provider = ContextRecordingPostProcessingProvider(recorder: recorder)
+
+    _ = try await SubtitlePostProcessor(provider: provider).postProcess(cues)
+    let batches = await recorder.batches()
+
+    try expectEqual(batches.count, 1)
+    try expectEqual(batches[0].context.dialogueIndexes, [0])
+    try expectEqual(batches[0].context.onScreenIndexes, [1])
+    try expectEqual(batches[0].context.unknownIndexes, [2])
+    try expectEqual(
+        batches[0].context.overlaps,
+        [
+            PostProcessingCueOverlap(index: 0, overlaps: [1]),
+            PostProcessingCueOverlap(index: 1, overlaps: [0]),
+        ]
+    )
+    try expectEqual(batches[0].cues.map(\.kind), [.dialogue, .onScreen, .unknown])
 }
 
 func testSubtitlePostProcessorChunksLimitedProviders() async throws {
@@ -910,12 +961,30 @@ private struct StubPostProcessingProvider: SubtitlePostProcessingProvider {
 
     let outputs: [PostProcessedCue]
 
-    func estimateCost(for cues: [PostProcessingInputCue]) -> TranslationCostEstimate {
+    func estimateCost(for batch: PostProcessingInputBatch) -> TranslationCostEstimate {
         TranslationCostEstimate(estimatedUSD: 0, lines: [])
     }
 
-    func postProcess(_ cues: [PostProcessingInputCue]) async throws -> [PostProcessedCue] {
+    func postProcess(_ batch: PostProcessingInputBatch) async throws -> [PostProcessedCue] {
         outputs
+    }
+}
+
+private struct ContextRecordingPostProcessingProvider: SubtitlePostProcessingProvider {
+    static let id = "context-recording-stub"
+    static let displayName = "Context Recording Stub"
+
+    let recorder: PostProcessingBatchRecorder
+
+    func estimateCost(for batch: PostProcessingInputBatch) -> TranslationCostEstimate {
+        TranslationCostEstimate(estimatedUSD: 0, lines: [])
+    }
+
+    func postProcess(_ batch: PostProcessingInputBatch) async throws -> [PostProcessedCue] {
+        await recorder.record(batch)
+        return batch.cues.map { cue in
+            PostProcessedCue(startTime: cue.startTime, endTime: cue.endTime, text: cue.text)
+        }
     }
 }
 
@@ -926,13 +995,13 @@ private struct ChunkingStubPostProcessingProvider: SubtitlePostProcessingProvide
     let maxPromptCharacters: Int?
     let recorder: PostProcessingBatchRecorder
 
-    func estimateCost(for cues: [PostProcessingInputCue]) -> TranslationCostEstimate {
+    func estimateCost(for batch: PostProcessingInputBatch) -> TranslationCostEstimate {
         TranslationCostEstimate(estimatedUSD: 0, lines: [])
     }
 
-    func postProcess(_ cues: [PostProcessingInputCue]) async throws -> [PostProcessedCue] {
-        await recorder.record(cues.count)
-        return cues.map { cue in
+    func postProcess(_ batch: PostProcessingInputBatch) async throws -> [PostProcessedCue] {
+        await recorder.record(batch.cues.count)
+        return batch.cues.map { cue in
             PostProcessedCue(startTime: cue.startTime, endTime: cue.endTime, text: cue.text)
         }
     }
@@ -944,16 +1013,16 @@ private struct ContextFailingPostProcessingProvider: SubtitlePostProcessingProvi
 
     let recorder: PostProcessingBatchRecorder
 
-    func estimateCost(for cues: [PostProcessingInputCue]) -> TranslationCostEstimate {
+    func estimateCost(for batch: PostProcessingInputBatch) -> TranslationCostEstimate {
         TranslationCostEstimate(estimatedUSD: 0, lines: [])
     }
 
-    func postProcess(_ cues: [PostProcessingInputCue]) async throws -> [PostProcessedCue] {
-        await recorder.record(cues.count)
-        if cues.count > 2 {
+    func postProcess(_ batch: PostProcessingInputBatch) async throws -> [PostProcessedCue] {
+        await recorder.record(batch.cues.count)
+        if batch.cues.count > 2 {
             throw PostProcessingError.contextWindowExceeded
         }
-        return cues.map { cue in
+        return batch.cues.map { cue in
             PostProcessedCue(startTime: cue.startTime, endTime: cue.endTime, text: cue.text)
         }
     }
@@ -963,24 +1032,33 @@ private struct UnsupportedLanguagePostProcessingProvider: SubtitlePostProcessing
     static let id = "unsupported-language-stub"
     static let displayName = "Unsupported Language Stub"
 
-    func estimateCost(for cues: [PostProcessingInputCue]) -> TranslationCostEstimate {
+    func estimateCost(for batch: PostProcessingInputBatch) -> TranslationCostEstimate {
         TranslationCostEstimate(estimatedUSD: 0, lines: [])
     }
 
-    func postProcess(_ cues: [PostProcessingInputCue]) async throws -> [PostProcessedCue] {
+    func postProcess(_ batch: PostProcessingInputBatch) async throws -> [PostProcessedCue] {
         throw PostProcessingError.unsupportedLanguageOrLocale
     }
 }
 
 private actor PostProcessingBatchRecorder {
     private var sizes: [Int] = []
+    private var recordedBatches: [PostProcessingInputBatch] = []
 
     func record(_ size: Int) {
         sizes.append(size)
     }
 
+    func record(_ batch: PostProcessingInputBatch) {
+        recordedBatches.append(batch)
+    }
+
     func batchSizes() -> [Int] {
         sizes
+    }
+
+    func batches() -> [PostProcessingInputBatch] {
+        recordedBatches
     }
 }
 

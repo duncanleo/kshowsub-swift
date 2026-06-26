@@ -73,17 +73,17 @@ struct OpenAIPostProcessingProvider: SubtitlePostProcessingProvider, Sendable {
         let reasoning_effort: String?
     }
 
-    func estimateCost(for cues: [PostProcessingInputCue]) -> TranslationCostEstimate {
+    func estimateCost(for batch: PostProcessingInputBatch) -> TranslationCostEstimate {
         TranslationCostEstimate(
             estimatedUSD: nil,
             lines: [
-                "Post-processing will send \(cues.count) input cue(s) to the configured OpenAI-compatible provider; billing depends on that provider."
+                "Post-processing will send \(batch.cues.count) input cue(s) to the configured OpenAI-compatible provider; billing depends on that provider."
             ]
         )
     }
 
-    func postProcess(_ cues: [PostProcessingInputCue]) async throws -> [PostProcessedCue] {
-        guard !cues.isEmpty else { return [] }
+    func postProcess(_ batch: PostProcessingInputBatch) async throws -> [PostProcessedCue] {
+        guard !batch.cues.isEmpty else { return [] }
         let payload = ChatCompletionsRequest(
             model: model,
             messages: [
@@ -93,7 +93,7 @@ struct OpenAIPostProcessingProvider: SubtitlePostProcessingProvider, Sendable {
                         PostProcessingPrompt.systemPrompt(locale: locale, profile: .openAI)
                     )
                 ),
-                .init(role: "user", content: sanitizedJSONText(PostProcessingPrompt.userPrompt(cues: cues))),
+                .init(role: "user", content: sanitizedJSONText(PostProcessingPrompt.userPrompt(batch: batch))),
             ],
             temperature: modelSpecificTemperature(),
             reasoning_effort: modelSpecificReasoningEffort()

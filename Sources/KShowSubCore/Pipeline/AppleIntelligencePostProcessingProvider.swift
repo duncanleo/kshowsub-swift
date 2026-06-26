@@ -37,7 +37,7 @@ struct AppleIntelligencePostProcessingProvider: SubtitlePostProcessingProvider, 
         model = created
     }
 
-    func estimateCost(for cues: [PostProcessingInputCue]) -> TranslationCostEstimate {
+    func estimateCost(for batch: PostProcessingInputBatch) -> TranslationCostEstimate {
         TranslationCostEstimate(
             estimatedUSD: 0,
             lines: [
@@ -47,8 +47,8 @@ struct AppleIntelligencePostProcessingProvider: SubtitlePostProcessingProvider, 
         )
     }
 
-    func postProcess(_ cues: [PostProcessingInputCue]) async throws -> [PostProcessedCue] {
-        guard !cues.isEmpty else { return [] }
+    func postProcess(_ batch: PostProcessingInputBatch) async throws -> [PostProcessedCue] {
+        guard !batch.cues.isEmpty else { return [] }
         let session = LanguageModelSession(
             model: model,
             instructions: PostProcessingPrompt.systemPrompt(
@@ -58,7 +58,7 @@ struct AppleIntelligencePostProcessingProvider: SubtitlePostProcessingProvider, 
         )
         let raw: String
         do {
-            let response = try await session.respond(to: PostProcessingPrompt.userPrompt(cues: cues))
+            let response = try await session.respond(to: PostProcessingPrompt.userPrompt(batch: batch))
             raw = try response.rawContent.value(String.self)
         } catch {
             if isContextWindowError(error) {

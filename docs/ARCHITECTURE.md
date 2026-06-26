@@ -13,7 +13,7 @@ KShowSub is currently a macOS Swift Package that builds a command-line tool and 
 2. Speech transcription and OCR extraction run concurrently.
 3. `SpeechCueMerger` combines word-level speech cues into readable dialogue cues.
 4. OCR cues and dialogue cues are sorted into a merged timeline.
-5. Optional LLM post-processing reduces OCR and speech into a single bottom-dialogue track.
+5. Optional LLM post-processing sends batched dialogue/on-screen cue windows with overlap context to a provider and returns a single bottom-dialogue track.
 6. Optional translation rewrites cue text while preserving timing and metadata.
 7. `ASSMerger` writes styled ASS output with top OCR and bottom dialogue styles.
 
@@ -29,7 +29,7 @@ OCR providers implement `VideoOCRProcessing`. The current `OCRProcessor` is the 
 
 Translation providers implement `TranslationProvider`. Provider configuration validation belongs at the registry/provider boundary; pipeline code should not guess environment variables or network behavior beyond that interface.
 
-Subtitle post-processing providers implement `SubtitlePostProcessingProvider`. The registry mirrors translation provider selection and currently supports Apple Intelligence and OpenAI-compatible chat completions.
+Subtitle post-processing providers implement `SubtitlePostProcessingProvider`. Providers receive `PostProcessingInputBatch` values that include the cues, explicit dialogue/on-screen/unknown index groups, and cue overlap context. The registry mirrors translation provider selection and currently supports Apple Intelligence and OpenAI-compatible chat completions.
 
 Pipeline orchestration should accept protocol existentials or a registry-resolved provider, not concrete framework implementations. If provider selection becomes user-configurable for speech or OCR, mirror the translation registry pattern: validate provider IDs and configuration at the boundary, then pass only the protocol instance into the pipeline.
 
