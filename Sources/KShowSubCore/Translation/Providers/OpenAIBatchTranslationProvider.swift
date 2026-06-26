@@ -14,7 +14,7 @@ struct OpenAIBatchTranslationProvider: TranslationProvider, Sendable {
     static let id = "openai-batch"
     static let displayName = "OpenAI"
 
-    private static let defaultModel = "gpt-5-nano"
+    private static let defaultModel = "gpt-5.4-nano"
     private static let maxConcurrentRequests = 10
     private static let maxRequestsPerSecond = 1.5
     private static let maxItemsPerBatch = 200
@@ -98,7 +98,10 @@ struct OpenAIBatchTranslationProvider: TranslationProvider, Sendable {
             Some lines may be sentence fragments, partial phrases, slang, or appear incomplete — translate them as-is; never skip, merge, or discard any line.
             Use surrounding lines as context to produce natural, coherent translations, but still output one translated line per input line.
             A single input line may contain dialogue from multiple speakers or adjacent unrelated fragments. Translate each utterance in order and do not combine separate speakers, fragments, or sentences into one inferred sentence.
-            Keep each translation about as concise as its source line; avoid adding explanation, emphasis, or extra words unless needed for fluent target-language subtitles.
+            Keep each translation at least as concise as its source line; prefer shorter subtitle wording over literal expansion.
+            Preserve existing line breaks and parenthetical structure. If a source line is parenthesized, keep the translation parenthesized and do not merge it into dialogue.
+            Avoid adding explanation, emphasis, filler, or extra words unless required for fluent target-language subtitles.
+            Do not turn compact captions, labels, warnings, rules, or numbers into full explanatory sentences.
             \(nounGuidance)
             Never refuse, ask for clarification, or add commentary. If a line is ambiguous or unclear, provide your best translation anyway.
             Do not merge, split, or skip lines.
@@ -109,7 +112,9 @@ struct OpenAIBatchTranslationProvider: TranslationProvider, Sendable {
             Translate the text into \(targetName).
             Use context only to disambiguate the text.
             The text may contain dialogue from multiple speakers or adjacent unrelated fragments. Translate each utterance in order and do not combine separate speakers, fragments, or sentences into one inferred sentence.
-            Keep the translation about as concise as the source text.
+            Keep the translation at least as concise as the source text; prefer subtitle brevity over literal expansion.
+            Preserve parenthetical structure and do not merge parenthetical text into dialogue.
+            Do not turn compact captions, labels, warnings, rules, or numbers into full explanatory sentences.
             \(nounGuidance)
             Return only the translation.
             """

@@ -84,18 +84,32 @@ public struct SubtitleTranslator {
             }
         }
 
-        return cues.map { cue in
+        let translatedCues = cues.flatMap { cue -> [SubtitleCue] in
             let key = cue.plainText.trimmingCharacters(in: .whitespacesAndNewlines)
             let translatedText =
                 key.isEmpty ? cue.plainText : (translationMap[key] ?? cue.plainText)
             let rawForASS = translatedText.replacingOccurrences(of: "\n", with: "\\N")
-            return SubtitleCue(
+            let translatedCue = SubtitleCue(
                 id: cue.id,
                 cueIdentifier: cue.cueIdentifier,
                 startTime: cue.startTime,
                 endTime: cue.endTime,
                 rawText: rawForASS,
                 plainText: translatedText,
+                frameRange: cue.frameRange,
+                attributes: cue.attributes
+            )
+            return SubtitlePresentationNormalizer.cues(from: translatedCue)
+        }
+
+        return translatedCues.enumerated().map { index, cue in
+            SubtitleCue(
+                id: index + 1,
+                cueIdentifier: cue.cueIdentifier,
+                startTime: cue.startTime,
+                endTime: cue.endTime,
+                rawText: cue.rawText,
+                plainText: cue.plainText,
                 frameRange: cue.frameRange,
                 attributes: cue.attributes
             )

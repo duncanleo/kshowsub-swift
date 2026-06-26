@@ -32,6 +32,7 @@ The `Validate` workflow runs on pull requests and pushes to `main`. It currently
 - Apple Intelligence availability
 - Translation framework model availability
 - Network calls to OpenAI-compatible APIs
+- LLM subtitle post-processing quality over real OCR/speech outputs
 
 These should be covered by opt-in local scripts or explicit integration jobs when fixtures and secrets are available.
 
