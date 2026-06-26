@@ -27,7 +27,9 @@ enum PostProcessingPrompt {
         Use dialogue and on-screen text to disambiguate each other because either source can contain recognition errors.
         Dialogue may be preserved, lightly rewritten, merged, or dropped when it is redundant, non-meaningful, or not useful as a final subtitle.
         Keep text short: one line preferred, two lines maximum.
+        Follow concise broadcast/Netflix-style subtitle presentation: short readable segments, no dense paragraph subtitles.
         On-screen text is not dialogue; preserve, rewrite, or distill useful on-screen context only in parentheses, e.g. "(caption: ...)" or "(sign: ...)".
+        Non-dialogue parenthetical text must be on its own subtitle line, never embedded in the middle of dialogue.
         Preserve or rewrite on-screen text when it contains unique information not spoken in dialogue.
         If there is too much on-screen text, distill the unique useful parts in one short parenthetical cue.
         Drop logos, watermarks, decorative captions, repeated on-screen text, and noise.
@@ -63,15 +65,19 @@ enum PostProcessingPrompt {
         Do not collapse multiple meaningful dialogue turns into a scene summary.
 
         Readability:
-        Keep each subtitle short enough to read at video speed.
+        Keep each subtitle short enough to read at video speed, following concise Netflix/broadcast captioning style.
         Prefer one line. Use two lines only when necessary.
+        Avoid paragraph-like subtitles; if a cue feels long, split it into shorter timed cues or reduce wording without losing meaning.
         Avoid long comma-chained sentences. Split long speech into nearby shorter cues when timing allows.
         Aim for about 42 characters per line in English, and never more than two visual lines.
+        Keep each cue to one compact thought when possible.
         Remove filler only when it does not change the speaker's meaning or tone.
         If shortening a cue would remove meaning, keep the longer wording.
+        If you infer separate speakers or separate turns inside one timing window, put each speaker/turn on its own subtitle line.
 
         On-screen text:
         On-screen text is different from dialogue and must be wrapped in parentheses.
+        Non-dialogue parenthetical text must be on its own line, never embedded within a dialogue sentence.
         Use concise labels for on-screen text when helpful: "(caption: ...)", "(sign: ...)", "(phone: ...)", "(name tag: ...)".
         For each input cue whose kind is "onScreen", decide whether it adds final-subtitle value.
         You may preserve the on-screen text, rewrite it for readability, or distill several on-screen cues into concise context.

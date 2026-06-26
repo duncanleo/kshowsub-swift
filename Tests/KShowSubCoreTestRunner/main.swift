@@ -128,6 +128,10 @@ enum KShowSubCoreTestRunner {
                 testSubtitlePostProcessorReturnsBottomDialogueCues
             ),
             (
+                "SubtitlePostProcessor separates parenthetical presentation lines",
+                testSubtitlePostProcessorSeparatesParentheticalPresentationLines
+            ),
+            (
                 "SubtitlePostProcessor passes cue role and overlap context",
                 testSubtitlePostProcessorPassesCueRoleAndOverlapContext
             ),
@@ -526,6 +530,15 @@ func testPostProcessingPromptIncludesKoreanShowGuidance() throws {
     try expect(prompt.contains("Korean shows"), "Expected Korean show subtitle guidance")
     try expect(prompt.contains("never more than two visual lines"), "Expected line-count guidance")
     try expect(prompt.contains("parentheses"), "Expected parenthetical on-screen text guidance")
+    try expect(
+        prompt.contains("Non-dialogue parenthetical text must be on its own line"),
+        "Expected parenthetical line separation guidance")
+    try expect(
+        prompt.contains("Netflix/broadcast captioning style"),
+        "Expected broadcast subtitle brevity guidance")
+    try expect(
+        prompt.contains("separate speakers or separate turns"),
+        "Expected separate speaker line guidance")
     try expect(prompt.contains("not scene summarization"), "Expected anti-summarization guidance")
     try expect(prompt.contains("discern what should become the final subtitles"), "Expected final-subtitle selection guidance")
     try expect(
@@ -661,6 +674,39 @@ func testSubtitlePostProcessorReturnsBottomDialogueCues() async throws {
     try expect(
         processed[0].attributes.contains { $0.key == "Style" && $0.value == "BottomDialogue" },
         "Expected post-processed cues to use bottom dialogue style"
+    )
+}
+
+func testSubtitlePostProcessorSeparatesParentheticalPresentationLines() async throws {
+    let cues = [
+        SubtitleCue(
+            id: 1,
+            startTime: 0,
+            endTime: 1_500,
+            rawText: "Nice to meet you",
+            plainText: "Nice to meet you",
+            attributes: [SubtitleAttribute(key: "Style", value: "BottomDialogue")]
+        )
+    ]
+    let provider = StubPostProcessingProvider(
+        outputs: [
+            PostProcessedCue(
+                startTime: 0,
+                endTime: 1_500,
+                text: "Nice to meet you (caption: first meeting) Producer Jang."
+            )
+        ]
+    )
+
+    let processed = try await SubtitlePostProcessor(provider: provider).postProcess(cues)
+
+    try expectEqual(
+        processed[0].plainText,
+        "Nice to meet you\n(caption: first meeting)\nProducer Jang."
+    )
+    try expectEqual(
+        processed[0].rawText,
+        "Nice to meet you\\N(caption: first meeting)\\NProducer Jang."
     )
 }
 

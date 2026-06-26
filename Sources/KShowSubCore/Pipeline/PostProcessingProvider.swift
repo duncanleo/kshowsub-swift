@@ -221,7 +221,7 @@ public struct SubtitlePostProcessor {
         }
 
         return outputs.enumerated().map { offset, output in
-            let text = output.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = Self.presentationText(for: output.text)
             let endTime = max(output.endTime, output.startTime + 1)
             return SubtitleCue(
                 id: offset + 1,
@@ -232,6 +232,96 @@ public struct SubtitlePostProcessor {
                 attributes: [SubtitleAttribute(key: "Style", value: "BottomDialogue")]
             )
         }
+    }
+
+    private enum PresentationSegment {
+        case dialogue(String)
+        case nonDialogue(String)
+    }
+
+    private static func presentationText(for raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "\\N", with: "\n")
+            .components(separatedBy: "\n")
+            .flatMap { presentationLines(for: $0) }
+            .map(compactWhitespace)
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
+    private static func presentationLines(for line: String) -> [String] {
+        let segments = presentationSegments(in: line)
+        let hasDialogue = segments.contains { segment in
+            if case .dialogue(let text) = segment {
+                return !compactWhitespace(text).isEmpty
+            }
+            return false
+        }
+        let hasNonDialogue = segments.contains { segment in
+            if case .nonDialogue = segment { return true }
+            return false
+        }
+        guard hasDialogue, hasNonDialogue else {
+            let compacted = compactWhitespace(line)
+            return compacted.isEmpty ? [] : [compacted]
+        }
+
+        var lines: [String] = []
+        var dialogueParts: [String] = []
+
+        func flushDialogue() {
+            let dialogue = compactWhitespace(dialogueParts.joined(separator: " "))
+            if !dialogue.isEmpty {
+                lines.append(dialogue)
+            }
+            dialogueParts.removeAll(keepingCapacity: true)
+        }
+
+        for segment in segments {
+            switch segment {
+            case .dialogue(let text):
+                let compacted = compactWhitespace(text)
+                if !compacted.isEmpty {
+                    dialogueParts.append(compacted)
+                }
+            case .nonDialogue(let text):
+                flushDialogue()
+                let compacted = compactWhitespace(text)
+                if !compacted.isEmpty {
+                    lines.append(compacted)
+                }
+            }
+        }
+        flushDialogue()
+        return lines
+    }
+
+    private static func presentationSegments(in line: String) -> [PresentationSegment] {
+        var segments: [PresentationSegment] = []
+        var cursor = line.startIndex
+
+        while cursor < line.endIndex {
+            guard let open = line[cursor...].firstIndex(of: "("),
+                let close = line[line.index(after: open)...].firstIndex(of: ")")
+            else {
+                segments.append(.dialogue(String(line[cursor...])))
+                break
+            }
+
+            if open > cursor {
+                segments.append(.dialogue(String(line[cursor..<open])))
+            }
+            segments.append(.nonDialogue(String(line[open...close])))
+            cursor = line.index(after: close)
+        }
+        return segments
+    }
+
+    private static func compactWhitespace(_ raw: String) -> String {
+        raw
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func postProcessBatchWithAdaptiveSplitting(
