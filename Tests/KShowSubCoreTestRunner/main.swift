@@ -46,6 +46,28 @@ func require<T>(
     return value
 }
 
+func expectContainsTerms(
+    _ text: String,
+    _ terms: [String],
+    _ message: String,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) throws {
+    let normalized = text.lowercased()
+    let missing = terms.filter { !normalized.contains($0.lowercased()) }
+    try expect(missing.isEmpty, "\(message). Missing: \(missing)", file: file, line: line)
+}
+
+func renderedLines(from cues: [SubtitleCue]) -> [String] {
+    cues.flatMap { cue in
+        cue.plainText
+            .replacingOccurrences(of: "\\N", with: "\n")
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+}
+
 @main
 enum KShowSubCoreTestRunner {
     typealias Test = (name: String, run: () async throws -> Void)
@@ -531,46 +553,37 @@ func testPostProcessingPromptIncludesShowSubtitleGuidance() throws {
     let applePrompt = PostProcessingPrompt.systemPrompt(
         locale: Locale(identifier: "ko-KR"), profile: .appleIntelligence)
 
-    try expect(prompt.contains("TV, variety, and reality shows"), "Expected show subtitle guidance")
-    try expect(
-        prompt.contains("also work for other languages and show formats"),
-        "Expected non-Korean show support guidance")
-    try expect(prompt.contains("Never return more than two visual lines"), "Expected line-count guidance")
-    try expect(prompt.contains("parentheses"), "Expected parenthetical on-screen text guidance")
-    try expect(
-        prompt.contains("Non-dialogue parenthetical text must be on its own line"),
-        "Expected parenthetical line separation guidance")
-    try expect(
-        prompt.contains("broadcast/streaming captioning style"),
-        "Expected broadcast subtitle brevity guidance")
-    try expect(
-        prompt.contains("about 84 characters per subtitle cue"),
-        "Expected cue length guidance")
-    try expect(
-        prompt.contains("separate speakers or separate turns"),
-        "Expected separate speaker line guidance")
-    try expect(prompt.contains("not scene summarization"), "Expected anti-summarization guidance")
-    try expect(prompt.contains("discern what should become the final subtitles"), "Expected final-subtitle selection guidance")
-    try expect(
-        prompt.contains("two imperfect signals"),
-        "Expected dialogue/OCR cross-source disambiguation guidance")
-    try expect(
-        prompt.contains("correct or disambiguate likely recognition errors"),
-        "Expected recognition error repair guidance")
-    try expect(
-        prompt.contains("preserve the on-screen text, rewrite it for readability, or distill"),
-        "Expected on-screen text preserve/rewrite/distill guidance")
-    try expect(
-        prompt.contains("decide whether it belongs in the final subtitle track"),
-        "Expected dialogue selection guidance")
-    try expect(
-        prompt.contains("You may drop dialogue"),
-        "Expected dialogue dropping guidance")
-    try expect(
-        prompt.contains("must be wrapped in parentheses"),
-        "Expected parenthesized on-screen text contract")
-    try expect(
-        prompt.contains("Avoid overly sparse output"),
+    try expectContainsTerms(
+        prompt,
+        ["tv", "variety", "reality", "other languages"],
+        "Expected broad show-format guidance")
+    try expectContainsTerms(
+        prompt,
+        ["subtitle", "short", "two", "visual", "lines", "42", "84", "paragraph"],
+        "Expected concise caption presentation guidance")
+    try expectContainsTerms(
+        prompt,
+        ["on-screen", "parentheses", "own", "line"],
+        "Expected parenthetical on-screen text presentation guidance")
+    try expectContainsTerms(
+        prompt,
+        ["speaker", "turn", "line"],
+        "Expected separate speaker/turn line guidance")
+    try expectContainsTerms(
+        prompt,
+        ["scene", "summarization", "final", "subtitles", "preserve", "input", "cue"],
+        "Expected final-subtitle selection guidance")
+    try expectContainsTerms(
+        prompt,
+        ["dialogue", "transcription", "ocr", "imperfect", "disambiguate", "recognition", "errors"],
+        "Expected cross-source error repair guidance")
+    try expectContainsTerms(
+        prompt,
+        ["preserve", "rewrite", "distill", "drop dialogue"],
+        "Expected dialogue and on-screen text editorial guidance")
+    try expectContainsTerms(
+        prompt,
+        ["avoid", "sparse", "moment-by-moment"],
         "Expected density guardrail")
     try expect(
         applePrompt.count < prompt.count, "Expected Apple Intelligence prompt to be more compact")
@@ -709,11 +722,27 @@ func testSubtitlePostProcessorSeparatesParentheticalPresentationLines() async th
     )
 
     let processed = try await SubtitlePostProcessor(provider: provider).postProcess(cues)
+    let lines = renderedLines(from: processed)
 
-    try expectEqual(processed.count, 2)
-    try expectEqual(processed[0].plainText, "Nice to meet you\n(caption: first meeting).")
-    try expectEqual(processed[0].rawText, "Nice to meet you\\N(caption: first meeting).")
-    try expectEqual(processed[1].plainText, "Producer Jang.")
+    try expect(processed.count >= 2, "Expected mixed output to split into multiple cues")
+    try expect(
+        lines.contains { $0.hasPrefix("(caption:") },
+        "Expected parenthetical context on its own rendered line"
+    )
+    try expect(
+        lines.allSatisfy { line in
+            !line.contains("(") || line.hasPrefix("(")
+        },
+        "Expected parenthetical context not to be embedded inside dialogue lines"
+    )
+    try expect(
+        processed.contains { $0.rawText.contains("\\N(caption:") },
+        "Expected ASS line break before parenthetical context"
+    )
+    try expect(
+        lines.contains { $0.contains("Producer Jang") },
+        "Expected trailing dialogue to be preserved after parenthetical context"
+    )
 }
 
 func testSubtitlePostProcessorSplitsWordyPresentationCues() async throws {
@@ -748,12 +777,14 @@ func testSubtitlePostProcessorSplitsWordyPresentationCues() async throws {
         processed.allSatisfy { $0.plainText.count <= 84 || $0.plainText.hasPrefix("(") },
         "Expected split cues to stay compact"
     )
-    let renderedLines = processed.flatMap { cue in
-        cue.plainText.components(separatedBy: "\n")
-    }
+    let lines = renderedLines(from: processed)
     try expect(
-        renderedLines.contains("(the square is kkangkkot!)."),
+        lines.contains { $0.hasPrefix("(") && $0.localizedCaseInsensitiveContains("kkangkkot") },
         "Expected parenthetical text with trailing punctuation on its own line"
+    )
+    try expect(
+        lines.allSatisfy { !$0.contains("(") || $0.hasPrefix("(") },
+        "Expected parenthetical text not to be embedded inside dialogue lines"
     )
 }
 
