@@ -180,6 +180,9 @@ public enum PostProcessingError: LocalizedError {
 }
 
 public struct SubtitlePostProcessor {
+    private static let maxPresentationLineCharacters = 42
+    private static let maxPresentationCueCharacters = 84
+
     private let provider: any SubtitlePostProcessingProvider
 
     public init(provider: any SubtitlePostProcessingProvider) {
@@ -220,8 +223,8 @@ public struct SubtitlePostProcessor {
             outputs.append(contentsOf: try await postProcessBatchWithAdaptiveSplitting(Self.batch(from: batchCues)))
         }
 
-        return outputs.enumerated().map { offset, output in
-            let text = Self.presentationText(for: output.text)
+        return Self.presentationOutputs(from: outputs).enumerated().map { offset, output in
+            let text = output.text
             let endTime = max(output.endTime, output.startTime + 1)
             return SubtitleCue(
                 id: offset + 1,
@@ -234,23 +237,51 @@ public struct SubtitlePostProcessor {
         }
     }
 
+    private static func presentationOutputs(from outputs: [PostProcessedCue]) -> [PostProcessedCue] {
+        outputs.flatMap { output -> [PostProcessedCue] in
+            let lines = presentationLines(for: output.text)
+                .flatMap(splitLongPresentationLine)
+                .filter { !$0.isEmpty }
+            guard !lines.isEmpty else { return [] }
+
+            let groups = presentationLineGroups(from: lines)
+            guard groups.count > 1 else {
+                return [
+                    PostProcessedCue(
+                        startTime: output.startTime,
+                        endTime: output.endTime,
+                        text: groups[0].joined(separator: "\n")
+                    )
+                ]
+            }
+
+            let duration = max(output.endTime - output.startTime, groups.count)
+            return groups.enumerated().map { index, group in
+                let start = output.startTime + duration * index / groups.count
+                let end = output.startTime + duration * (index + 1) / groups.count
+                return PostProcessedCue(
+                    startTime: start,
+                    endTime: max(end, start + 1),
+                    text: group.joined(separator: "\n")
+                )
+            }
+        }
+    }
+
     private enum PresentationSegment {
         case dialogue(String)
         case nonDialogue(String)
     }
 
-    private static func presentationText(for raw: String) -> String {
+    private static func presentationLines(for raw: String) -> [String] {
         raw
             .replacingOccurrences(of: "\\N", with: "\n")
             .components(separatedBy: "\n")
-            .flatMap { presentationLines(for: $0) }
-            .map(compactWhitespace)
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n")
+            .flatMap { presentationLinesInSingleLine(for: $0) }
     }
 
-    private static func presentationLines(for line: String) -> [String] {
-        let segments = presentationSegments(in: line)
+    private static func presentationLinesInSingleLine(for rawLine: String) -> [String] {
+        let segments = presentationSegments(in: rawLine)
         let hasDialogue = segments.contains { segment in
             if case .dialogue(let text) = segment {
                 return !compactWhitespace(text).isEmpty
@@ -262,7 +293,7 @@ public struct SubtitlePostProcessor {
             return false
         }
         guard hasDialogue, hasNonDialogue else {
-            let compacted = compactWhitespace(line)
+            let compacted = compactWhitespace(rawLine)
             return compacted.isEmpty ? [] : [compacted]
         }
 
@@ -311,10 +342,116 @@ public struct SubtitlePostProcessor {
             if open > cursor {
                 segments.append(.dialogue(String(line[cursor..<open])))
             }
-            segments.append(.nonDialogue(String(line[open...close])))
-            cursor = line.index(after: close)
+            let end = parentheticalEndIncludingTrailingPunctuation(in: line, close: close)
+            segments.append(.nonDialogue(String(line[open...end])))
+            cursor = line.index(after: end)
         }
         return segments
+    }
+
+    private static func parentheticalEndIncludingTrailingPunctuation(
+        in line: String,
+        close: String.Index
+    ) -> String.Index {
+        var end = close
+        var cursor = line.index(after: close)
+        while cursor < line.endIndex {
+            let char = line[cursor]
+            if char.isWhitespace {
+                break
+            }
+            if ".!?,;:".contains(char) {
+                end = cursor
+                cursor = line.index(after: cursor)
+                continue
+            }
+            break
+        }
+        return end
+    }
+
+    private static func splitLongPresentationLine(_ line: String) -> [String] {
+        let compacted = compactWhitespace(line)
+        guard compacted.count > maxPresentationLineCharacters else {
+            return compacted.isEmpty ? [] : [compacted]
+        }
+        if isNonDialogueLine(compacted) {
+            return [compacted]
+        }
+
+        let punctuationSplits = splitAtStrongPunctuation(compacted)
+        if punctuationSplits.count > 1,
+            punctuationSplits.allSatisfy({ !$0.isEmpty && $0.count <= maxPresentationCueCharacters })
+        {
+            return punctuationSplits
+        }
+        return wrapByWords(compacted, limit: maxPresentationLineCharacters)
+    }
+
+    private static func splitAtStrongPunctuation(_ line: String) -> [String] {
+        var parts: [String] = []
+        var start = line.startIndex
+        var index = line.startIndex
+        while index < line.endIndex {
+            let char = line[index]
+            if ".?!;".contains(char) {
+                let end = line.index(after: index)
+                let part = compactWhitespace(String(line[start..<end]))
+                if !part.isEmpty {
+                    parts.append(part)
+                }
+                start = end
+            }
+            index = line.index(after: index)
+        }
+        let tail = compactWhitespace(String(line[start..<line.endIndex]))
+        if !tail.isEmpty {
+            parts.append(tail)
+        }
+        return parts.count > 1 ? parts : [line]
+    }
+
+    private static func wrapByWords(_ line: String, limit: Int) -> [String] {
+        var lines: [String] = []
+        var current = ""
+        for word in line.split(separator: " ").map(String.init) {
+            let candidate = current.isEmpty ? word : "\(current) \(word)"
+            if !current.isEmpty, candidate.count > limit {
+                lines.append(current)
+                current = word
+            } else {
+                current = candidate
+            }
+        }
+        if !current.isEmpty {
+            lines.append(current)
+        }
+        return lines
+    }
+
+    private static func presentationLineGroups(from lines: [String]) -> [[String]] {
+        var groups: [[String]] = []
+        var current: [String] = []
+
+        for line in lines {
+            let candidate = current + [line]
+            if !current.isEmpty,
+                (candidate.count > 2 || candidate.joined(separator: " ").count > maxPresentationCueCharacters)
+            {
+                groups.append(current)
+                current = [line]
+            } else {
+                current = candidate
+            }
+        }
+        if !current.isEmpty {
+            groups.append(current)
+        }
+        return groups
+    }
+
+    private static func isNonDialogueLine(_ line: String) -> Bool {
+        line.hasPrefix("(") && (line.hasSuffix(")") || line.hasSuffix(").") || line.hasSuffix("!)"))
     }
 
     private static func compactWhitespace(_ raw: String) -> String {

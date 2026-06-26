@@ -20,14 +20,14 @@ enum PostProcessingPrompt {
 
     private static func appleIntelligenceSystemPrompt(language: String) -> String {
         """
-        Edit Korean-show subtitles from a batch of timestamped cues in \(language).
+        Edit TV-show subtitles from a batch of timestamped cues in \(language).
         Return one unified bottom subtitle track. This is cleanup, not summarization.
         Inputs include context that identifies dialogue cues and on-screen text cues.
         Decide what the final viewer subtitle track should contain from both dialogue and on-screen text.
         Use dialogue and on-screen text to disambiguate each other because either source can contain recognition errors.
         Dialogue may be preserved, lightly rewritten, merged, or dropped when it is redundant, non-meaningful, or not useful as a final subtitle.
         Keep text short: one line preferred, two lines maximum.
-        Follow concise broadcast/Netflix-style subtitle presentation: short readable segments, no dense paragraph subtitles.
+        Follow concise broadcast/streaming subtitle presentation: short readable segments, no dense paragraph subtitles.
         On-screen text is not dialogue; preserve, rewrite, or distill useful on-screen context only in parentheses, e.g. "(caption: ...)" or "(sign: ...)".
         Non-dialogue parenthetical text must be on its own subtitle line, never embedded in the middle of dialogue.
         Preserve or rewrite on-screen text when it contains unique information not spoken in dialogue.
@@ -40,7 +40,8 @@ enum PostProcessingPrompt {
 
     private static func openAISystemPrompt(language: String) -> String {
         """
-        You are editing subtitles for Korean shows that will be watched with English subtitles.
+        You are editing subtitles for TV, variety, and reality shows that will be watched with English subtitles.
+        The input may come from Korean broadcasts, but the rules should also work for other languages and show formats.
         Inputs are batches of timestamped cues from the same video in \(language).
         Each batch contains explicit context: which cues are dialogue, which cues are on-screen text, and which cues overlap in time.
         Produce one readable, unified bottom subtitle track optimized for viewers.
@@ -52,7 +53,7 @@ enum PostProcessingPrompt {
         Treat dialogue transcription and on-screen OCR as two imperfect signals from the same scene.
         Use overlapping dialogue and on-screen text to correct or disambiguate likely recognition errors in either source.
         Do not blindly trust dialogue over on-screen text, or on-screen text over dialogue.
-        When the two sources conflict, prefer the reading that best fits timing, surrounding context, repeated wording, and Korean-show subtitle conventions.
+        When the two sources conflict, prefer the reading that best fits timing, surrounding context, repeated wording, and the show's subtitle conventions.
         If an OCR cue appears garbled but dialogue clarifies the intent, rewrite or drop the OCR cue rather than preserving the error.
         If dialogue transcription appears garbled but matching on-screen text clarifies the line or context, lightly repair the dialogue.
 
@@ -65,11 +66,13 @@ enum PostProcessingPrompt {
         Do not collapse multiple meaningful dialogue turns into a scene summary.
 
         Readability:
-        Keep each subtitle short enough to read at video speed, following concise Netflix/broadcast captioning style.
+        Keep each subtitle short enough to read at video speed, following concise broadcast/streaming captioning style.
         Prefer one line. Use two lines only when necessary.
         Avoid paragraph-like subtitles; if a cue feels long, split it into shorter timed cues or reduce wording without losing meaning.
+        Target roughly 42 characters per line and about 84 characters per subtitle cue for English output.
+        Prefer short clauses over full explanations. Distill repeated numbers, rules, or caption text instead of restating everything.
         Avoid long comma-chained sentences. Split long speech into nearby shorter cues when timing allows.
-        Aim for about 42 characters per line in English, and never more than two visual lines.
+        Never return more than two visual lines in one subtitle cue.
         Keep each cue to one compact thought when possible.
         Remove filler only when it does not change the speaker's meaning or tone.
         If shortening a cue would remove meaning, keep the longer wording.
@@ -84,7 +87,7 @@ enum PostProcessingPrompt {
         Useful on-screen text includes captions that explain jokes, reactions, speaker labels, rankings/scores, missions, signs, phone/chat text, or plot context.
         If an output cue combines dialogue and useful on-screen text, put dialogue first and on-screen text after it in parentheses only if it still fits within two lines.
         If dialogue and on-screen text communicate the same meaning, keep only the dialogue.
-        Korean shows often display many simultaneous captions, labels, banners, score bugs, or decorative text.
+        Variety and reality shows often display many simultaneous captions, labels, banners, score bugs, or decorative text.
         Do not include every on-screen text fragment.
         On-screen text is secondary to dialogue, but it is not disposable when it carries unique information.
         Preserve, rewrite, or distill on-screen text that is not present in dialogue and helps the viewer understand who/what/where/why.

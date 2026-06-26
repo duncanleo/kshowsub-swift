@@ -100,8 +100,8 @@ enum KShowSubCoreTestRunner {
                 testOCRCuePositionDoesNotMatchMissingPositionToPresentPosition
             ),
             (
-                "PostProcessingPrompt includes Korean show subtitle guidance",
-                testPostProcessingPromptIncludesKoreanShowGuidance
+                "PostProcessingPrompt includes show subtitle guidance",
+                testPostProcessingPromptIncludesShowSubtitleGuidance
             ),
             (
                 "PostProcessingResponseParser parses JSON object",
@@ -130,6 +130,10 @@ enum KShowSubCoreTestRunner {
             (
                 "SubtitlePostProcessor separates parenthetical presentation lines",
                 testSubtitlePostProcessorSeparatesParentheticalPresentationLines
+            ),
+            (
+                "SubtitlePostProcessor splits wordy presentation cues",
+                testSubtitlePostProcessorSplitsWordyPresentationCues
             ),
             (
                 "SubtitlePostProcessor passes cue role and overlap context",
@@ -521,21 +525,27 @@ func testOCRCuePositionDoesNotMatchMissingPositionToPresentPosition() throws {
         !OCRCuePosition.isNear(positioned, nil), "Placed text should not match missing position")
 }
 
-func testPostProcessingPromptIncludesKoreanShowGuidance() throws {
+func testPostProcessingPromptIncludesShowSubtitleGuidance() throws {
     let prompt = PostProcessingPrompt.systemPrompt(
         locale: Locale(identifier: "ko-KR"), profile: .openAI)
     let applePrompt = PostProcessingPrompt.systemPrompt(
         locale: Locale(identifier: "ko-KR"), profile: .appleIntelligence)
 
-    try expect(prompt.contains("Korean shows"), "Expected Korean show subtitle guidance")
-    try expect(prompt.contains("never more than two visual lines"), "Expected line-count guidance")
+    try expect(prompt.contains("TV, variety, and reality shows"), "Expected show subtitle guidance")
+    try expect(
+        prompt.contains("also work for other languages and show formats"),
+        "Expected non-Korean show support guidance")
+    try expect(prompt.contains("Never return more than two visual lines"), "Expected line-count guidance")
     try expect(prompt.contains("parentheses"), "Expected parenthetical on-screen text guidance")
     try expect(
         prompt.contains("Non-dialogue parenthetical text must be on its own line"),
         "Expected parenthetical line separation guidance")
     try expect(
-        prompt.contains("Netflix/broadcast captioning style"),
+        prompt.contains("broadcast/streaming captioning style"),
         "Expected broadcast subtitle brevity guidance")
+    try expect(
+        prompt.contains("about 84 characters per subtitle cue"),
+        "Expected cue length guidance")
     try expect(
         prompt.contains("separate speakers or separate turns"),
         "Expected separate speaker line guidance")
@@ -693,20 +703,57 @@ func testSubtitlePostProcessorSeparatesParentheticalPresentationLines() async th
             PostProcessedCue(
                 startTime: 0,
                 endTime: 1_500,
-                text: "Nice to meet you (caption: first meeting) Producer Jang."
+                text: "Nice to meet you (caption: first meeting). Producer Jang."
             )
         ]
     )
 
     let processed = try await SubtitlePostProcessor(provider: provider).postProcess(cues)
 
-    try expectEqual(
-        processed[0].plainText,
-        "Nice to meet you\n(caption: first meeting)\nProducer Jang."
+    try expectEqual(processed.count, 2)
+    try expectEqual(processed[0].plainText, "Nice to meet you\n(caption: first meeting).")
+    try expectEqual(processed[0].rawText, "Nice to meet you\\N(caption: first meeting).")
+    try expectEqual(processed[1].plainText, "Producer Jang.")
+}
+
+func testSubtitlePostProcessorSplitsWordyPresentationCues() async throws {
+    let cues = [
+        SubtitleCue(
+            id: 1,
+            startTime: 0,
+            endTime: 3_000,
+            rawText: "The probability is 30%",
+            plainText: "The probability is 30%",
+            attributes: [SubtitleAttribute(key: "Style", value: "BottomDialogue")]
+        )
+    ]
+    let provider = StubPostProcessingProvider(
+        outputs: [
+            PostProcessedCue(
+                startTime: 0,
+                endTime: 3_000,
+                text:
+                    "The probability is 30%; the blackhead porgy is 30% too. The probability for the rockfish is 50% (the square is kkangkkot!)."
+            )
+        ]
     )
-    try expectEqual(
-        processed[0].rawText,
-        "Nice to meet you\\N(caption: first meeting)\\NProducer Jang."
+
+    let processed = try await SubtitlePostProcessor(provider: provider).postProcess(cues)
+
+    try expect(
+        processed.count > 1,
+        "Expected wordy post-processing output to split into multiple cues"
+    )
+    try expect(
+        processed.allSatisfy { $0.plainText.count <= 84 || $0.plainText.hasPrefix("(") },
+        "Expected split cues to stay compact"
+    )
+    let renderedLines = processed.flatMap { cue in
+        cue.plainText.components(separatedBy: "\n")
+    }
+    try expect(
+        renderedLines.contains("(the square is kkangkkot!)."),
+        "Expected parenthetical text with trailing punctuation on its own line"
     )
 }
 
