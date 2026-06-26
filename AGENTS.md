@@ -30,6 +30,7 @@ Use `swift build -c release --product KShowSub` before release changes. Full OCR
 - Treat generated `.ass` files and `.kshowsub/` workspaces as local artifacts.
 - Update docs when changing CLI flags, stage artifacts, provider behavior, or pipeline architecture.
 - Use Conventional Commits for all agent-created commits, for example `feat: add translation resume support`.
+- Include a `Co-Authored-By` trailer on agent-created commits.
 - If a repeated review comment becomes a rule, encode it in tests, scripts, or docs.
 
 ## Deeper Context
