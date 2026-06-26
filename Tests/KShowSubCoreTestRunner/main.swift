@@ -63,8 +63,12 @@ enum KShowSubCoreTestRunner {
             ("ASSMerger adds styles and renumbers cues", testASSMergerAddsStylesAndRenumbers),
             ("ASSMerger leaves OCR positioning disabled by default", testASSMergerLeavesOCRPositioningDisabledByDefault),
             ("ASSMerger applies OCR position overrides", testASSMergerAppliesOCRPositionOverrides),
+            ("ASSMerger applies RTL OCR position overrides", testASSMergerAppliesRTLOCRPositionOverrides),
+            ("ASSMerger keeps positioned OCR above overlapping dialogue", testASSMergerKeepsPositionedOCRAboveOverlappingDialogue),
+            ("ASSMerger lanes positioned OCR above overlapping dialogue", testASSMergerLanesPositionedOCRAboveOverlappingDialogue),
             ("ASSMerger applies clamped OCR font overrides", testASSMergerAppliesClampedOCRFontOverrides),
             ("OCRCuePosition derives normalized center", testOCRCuePositionDerivesNormalizedCenter),
+            ("OCRCuePosition derives directional anchors", testOCRCuePositionDerivesDirectionalAnchors),
             ("OCRCuePosition does not match missing position to present position", testOCRCuePositionDoesNotMatchMissingPositionToPresentPosition),
             ("OCRProfile exposes named profiles", testOCRProfileNames),
             ("OCRProfile unfiltered disables filters", testOCRProfileUnfiltered),
@@ -266,7 +270,97 @@ func testASSMergerAppliesOCRPositionOverrides() throws {
         enableOCRPositioning: true
     )
 
-    try expectEqual(subtitle.cues[0].rawText, "{\\an5\\pos(320,180)}sign")
+    try expectEqual(subtitle.cues[0].rawText, "{\\an4\\pos(320,180)}sign")
+}
+
+func testASSMergerAppliesRTLOCRPositionOverrides() throws {
+    let cue = SubtitleCue(
+        id: 1,
+        startTime: 0,
+        endTime: 500,
+        rawText: "sign",
+        plainText: "sign",
+        attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+            + OCRCuePosition.attributes(for: .init(x: 0.75, y: 0.75))
+    )
+
+    let subtitle = ASSMerger.merge(
+        cues: [cue],
+        playResX: 1280,
+        playResY: 720,
+        enableOCRPositioning: true,
+        ocrPositionTextDirection: .rtl
+    )
+
+    try expectEqual(subtitle.cues[0].rawText, "{\\an6\\pos(960,180)}sign")
+}
+
+func testASSMergerKeepsPositionedOCRAboveOverlappingDialogue() throws {
+    let dialogue = SubtitleCue(
+        id: 1,
+        startTime: 100,
+        endTime: 900,
+        rawText: "dialogue",
+        plainText: "dialogue",
+        attributes: [SubtitleAttribute(key: "Style", value: "BottomDialogue")]
+    )
+    let lowOCR = SubtitleCue(
+        id: 2,
+        startTime: 0,
+        endTime: 500,
+        rawText: "lower sign",
+        plainText: "lower sign",
+        attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+            + OCRCuePosition.attributes(for: .init(x: 0.25, y: 0.05))
+    )
+
+    let subtitle = ASSMerger.merge(
+        cues: [lowOCR, dialogue],
+        playResX: 1280,
+        playResY: 720,
+        enableOCRPositioning: true
+    )
+
+    try expectEqual(subtitle.cues[0].rawText, "{\\an4\\pos(320,605)}lower sign")
+}
+
+func testASSMergerLanesPositionedOCRAboveOverlappingDialogue() throws {
+    let dialogue = SubtitleCue(
+        id: 1,
+        startTime: 100,
+        endTime: 900,
+        rawText: "dialogue",
+        plainText: "dialogue",
+        attributes: [SubtitleAttribute(key: "Style", value: "BottomDialogue")]
+    )
+    let lowerOCR = SubtitleCue(
+        id: 2,
+        startTime: 0,
+        endTime: 500,
+        rawText: "lower sign",
+        plainText: "lower sign",
+        attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+            + OCRCuePosition.attributes(for: .init(x: 0.25, y: 0.05))
+    )
+    let upperOCR = SubtitleCue(
+        id: 3,
+        startTime: 0,
+        endTime: 500,
+        rawText: "upper sign",
+        plainText: "upper sign",
+        attributes: [SubtitleAttribute(key: "Style", value: "TopOCR")]
+            + OCRCuePosition.attributes(for: .init(x: 0.25, y: 0.07))
+    )
+
+    let subtitle = ASSMerger.merge(
+        cues: [lowerOCR, upperOCR, dialogue],
+        playResX: 1280,
+        playResY: 720,
+        enableOCRPositioning: true
+    )
+
+    try expectEqual(subtitle.cues[0].rawText, "{\\an4\\pos(320,605)}lower sign")
+    try expectEqual(subtitle.cues[1].rawText, "{\\an4\\pos(320,576)}upper sign")
 }
 
 func testASSMergerAppliesClampedOCRFontOverrides() throws {
@@ -296,8 +390,8 @@ func testASSMergerAppliesClampedOCRFontOverrides() throws {
         enableOCRPositioning: true
     )
 
-    try expectEqual(subtitle.cues[0].rawText, "{\\an5\\fs34\\pos(320,180)}small")
-    try expectEqual(subtitle.cues[1].rawText, "{\\an5\\fs64\\pos(960,540)}large")
+    try expectEqual(subtitle.cues[0].rawText, "{\\an4\\fs34\\pos(320,180)}small")
+    try expectEqual(subtitle.cues[1].rawText, "{\\an4\\fs64\\pos(960,540)}large")
 }
 
 func testOCRCuePositionDerivesNormalizedCenter() throws {
@@ -310,6 +404,27 @@ func testOCRCuePositionDerivesNormalizedCenter() throws {
 
     try expectEqual(String(format: "%.2f", center.x), "0.45")
     try expectEqual(String(format: "%.2f", center.y), "0.65")
+}
+
+func testOCRCuePositionDerivesDirectionalAnchors() throws {
+    let observations = [
+        ocrObservation(text: "Top", x: 0.20, y: 0.70, width: 0.20, height: 0.10),
+        ocrObservation(text: "Bottom", x: 0.30, y: 0.50, width: 0.40, height: 0.10),
+    ]
+
+    let ltr = try require(
+        OCRCuePosition.normalizedAnchor(for: observations, textDirection: .ltr),
+        "Missing LTR OCR anchor"
+    )
+    let rtl = try require(
+        OCRCuePosition.normalizedAnchor(for: observations, textDirection: .rtl),
+        "Missing RTL OCR anchor"
+    )
+
+    try expectEqual(String(format: "%.2f", ltr.x), "0.20")
+    try expectEqual(String(format: "%.2f", ltr.y), "0.65")
+    try expectEqual(String(format: "%.2f", rtl.x), "0.70")
+    try expectEqual(String(format: "%.2f", rtl.y), "0.65")
 }
 
 func testOCRCuePositionDoesNotMatchMissingPositionToPresentPosition() throws {

@@ -6,6 +6,18 @@ import SubtitleKit
 
 @main
 struct KShowSubCLI: AsyncParsableCommand {
+    enum OCRPositionDirection: String, ExpressibleByArgument {
+        case ltr
+        case rtl
+
+        var coreDirection: OCRCuePosition.TextDirection {
+            switch self {
+            case .ltr: return .ltr
+            case .rtl: return .rtl
+            }
+        }
+    }
+
     static let configuration = CommandConfiguration(
         commandName: ProcessInfo.processInfo.processName,
         abstract:
@@ -44,6 +56,13 @@ struct KShowSubCLI: AsyncParsableCommand {
             "Experimentally place OCR subtitles near their detected screen positions with limited dynamic font sizing."
     )
     var positionOCR: Bool = false
+
+    @Option(
+        name: .long,
+        help:
+            "Text direction for positioned OCR boundary alignment: ltr anchors the left edge, rtl anchors the right edge."
+    )
+    var ocrPositionDirection: OCRPositionDirection = .ltr
 
     @Option(
         name: .long,
@@ -117,7 +136,10 @@ struct KShowSubCLI: AsyncParsableCommand {
 
         let resolvedLocale = Locale(identifier: locale)
         let transcriber = VideoSpeechTranscriber(locale: resolvedLocale)
-        let ocrProcessor = OCRProcessor(positionedOverlays: positionOCR)
+        let ocrProcessor = OCRProcessor(
+            positionedOverlays: positionOCR,
+            positionedTextDirection: ocrPositionDirection.coreDirection
+        )
         let playRes = (x: OCRCuePosition.defaultPlayResX, y: OCRCuePosition.defaultPlayResY)
         let store = try JobStore(
             inputURL: inputURL, workDirOverride: workDir, resumeEnabled: resume)
@@ -127,7 +149,7 @@ struct KShowSubCLI: AsyncParsableCommand {
         let resolvedProfile = OCRProfile.named(ocrProfile)!
         let speechKey = Self.stageKey(parts: ["speech", resolvedLocale.identifier])
         let ocrFramesKey = Self.stageKey(parts: ["ocr", resolvedLocale.identifier, String(ocrFPS)])
-        let ocrLayoutKey = positionOCR ? "positioned" : "top"
+        let ocrLayoutKey = positionOCR ? "positioned-\(ocrPositionDirection.rawValue)" : "top"
         let ocrKey = Self.stageKey(parts: [
             "ocr", resolvedLocale.identifier, String(ocrFPS), ocrProfile, ocrLayoutKey,
         ])
@@ -180,7 +202,8 @@ struct KShowSubCLI: AsyncParsableCommand {
             cues: allCues,
             playResX: playRes.x,
             playResY: playRes.y,
-            enableOCRPositioning: positionOCR
+            enableOCRPositioning: positionOCR,
+            ocrPositionTextDirection: ocrPositionDirection.coreDirection
         )
 
         try await subtitle.save(to: outputURL, format: .ass, lineEnding: .lf)

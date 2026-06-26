@@ -11,6 +11,13 @@ public enum OCRCuePosition {
     static let minimumFontSize = 34
     static let maximumFontSize = 64
     static let fontHeightScale = 0.85
+    static let dialogueAvoidanceMinimumY = 0.16
+    static let dialogueAvoidanceLaneSpacing = 0.04
+
+    public enum TextDirection: String, Sendable {
+        case ltr
+        case rtl
+    }
 
     struct Normalized: Equatable {
         let x: Double
@@ -38,6 +45,30 @@ public enum OCRCuePosition {
         )
     }
 
+    static func normalizedAnchor(
+        for observations: [OCRTextObservation],
+        textDirection: TextDirection = .ltr
+    ) -> Normalized? {
+        guard !observations.isEmpty else { return nil }
+
+        var minX = Double.greatestFiniteMagnitude
+        var minY = Double.greatestFiniteMagnitude
+        var maxX = -Double.greatestFiniteMagnitude
+        var maxY = -Double.greatestFiniteMagnitude
+
+        for observation in observations {
+            minX = min(minX, observation.boundingBoxX)
+            minY = min(minY, observation.boundingBoxY)
+            maxX = max(maxX, observation.boundingBoxX + observation.boundingBoxWidth)
+            maxY = max(maxY, observation.boundingBoxY + observation.boundingBoxHeight)
+        }
+
+        return Normalized(
+            x: clamp(textDirection == .rtl ? maxX : minX),
+            y: clamp((minY + maxY) / 2)
+        )
+    }
+
     static func normalizedFontHeight(for observation: OCRTextObservation) -> Double {
         clamp(observation.boundingBoxHeight)
     }
@@ -59,7 +90,9 @@ public enum OCRCuePosition {
     static func assOverridePrefix(
         from attributes: [SubtitleAttribute],
         playResX: Int = defaultPlayResX,
-        playResY: Int = defaultPlayResY
+        playResY: Int = defaultPlayResY,
+        textDirection: TextDirection = .ltr,
+        minimumNormalizedY: Double? = nil
     ) -> String? {
         guard
             let normalizedX = value(for: xAttribute, in: attributes),
@@ -68,15 +101,25 @@ public enum OCRCuePosition {
             return nil
         }
 
-        var overrides = ["\\an5"]
+        var overrides = [textDirection == .rtl ? "\\an6" : "\\an4"]
         if let fontSize = fontSize(from: attributes, playResY: playResY) {
             overrides.append("\\fs\(fontSize)")
         }
 
         let x = Int((clamp(normalizedX) * Double(max(1, playResX))).rounded())
-        let y = Int(((1 - clamp(normalizedY)) * Double(max(1, playResY))).rounded())
+        let yPosition = minimumNormalizedY
+            .map { max(clamp(normalizedY), clamp($0)) } ?? clamp(normalizedY)
+        let y = Int(((1 - yPosition) * Double(max(1, playResY))).rounded())
         overrides.append("\\pos(\(x),\(y))")
         return "{\(overrides.joined())}"
+    }
+
+    static func normalizedY(from attributes: [SubtitleAttribute]) -> Double? {
+        value(for: yAttribute, in: attributes).map(clamp)
+    }
+
+    static func dialogueAvoidanceMinimumY(forLane lane: Int) -> Double {
+        clamp(dialogueAvoidanceMinimumY + Double(max(0, lane)) * dialogueAvoidanceLaneSpacing)
     }
 
     static func isNear(_ lhs: Normalized?, _ rhs: Normalized?) -> Bool {

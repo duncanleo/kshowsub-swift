@@ -23,9 +23,14 @@ public enum OCRProcessorError: LocalizedError {
 
 public actor OCRProcessor: VideoOCRProcessing {
     private let positionedOverlays: Bool
+    private let positionedTextDirection: OCRCuePosition.TextDirection
 
-    public init(positionedOverlays: Bool = false) {
+    public init(
+        positionedOverlays: Bool = false,
+        positionedTextDirection: OCRCuePosition.TextDirection = .ltr
+    ) {
         self.positionedOverlays = positionedOverlays
+        self.positionedTextDirection = positionedTextDirection
     }
 
     private struct PendingOCRFrame: @unchecked Sendable {
@@ -98,7 +103,8 @@ public actor OCRProcessor: VideoOCRProcessing {
                     index: record.index,
                     imageHeight: imageHeight,
                     profile: profile,
-                    positionedOverlays: positionedOverlays
+                    positionedOverlays: positionedOverlays,
+                    positionedTextDirection: positionedTextDirection
                 )
             } else {
                 return record.recognizedText.isEmpty
@@ -210,7 +216,8 @@ public actor OCRProcessor: VideoOCRProcessing {
                             index: record.index,
                             imageHeight: imageHeight,
                             profile: profile,
-                            positionedOverlays: positionedOverlays
+                            positionedOverlays: positionedOverlays,
+                            positionedTextDirection: positionedTextDirection
                         )
                     })
                 if let persistRecords {
@@ -224,7 +231,8 @@ public actor OCRProcessor: VideoOCRProcessing {
                         index: k,
                         imageHeight: imageHeight,
                         profile: profile,
-                        positionedOverlays: positionedOverlays
+                        positionedOverlays: positionedOverlays,
+                        positionedTextDirection: positionedTextDirection
                     )
                 )
                 if let persistRecords {
@@ -265,7 +273,8 @@ public actor OCRProcessor: VideoOCRProcessing {
                                 index: record.index,
                                 imageHeight: imageHeight,
                                 profile: profile,
-                                positionedOverlays: positionedOverlays
+                                positionedOverlays: positionedOverlays,
+                                positionedTextDirection: positionedTextDirection
                             )
                         })
                     if let persistRecords {
@@ -297,7 +306,8 @@ public actor OCRProcessor: VideoOCRProcessing {
                     index: record.index,
                     imageHeight: imageHeight,
                     profile: profile,
-                    positionedOverlays: positionedOverlays
+                    positionedOverlays: positionedOverlays,
+                    positionedTextDirection: positionedTextDirection
                 )
             })
         if let persistRecords {
@@ -457,11 +467,17 @@ public actor OCRProcessor: VideoOCRProcessing {
         index: Int,
         imageHeight: Double,
         profile: OCRProfile,
-        positionedOverlays: Bool
+        positionedOverlays: Bool,
+        positionedTextDirection: OCRCuePosition.TextDirection
     ) -> [OCRFrameText] {
         if positionedOverlays {
             return positionedFrameTexts(
-                observations, index: index, imageHeight: imageHeight, profile: profile)
+                observations,
+                index: index,
+                imageHeight: imageHeight,
+                profile: profile,
+                textDirection: positionedTextDirection
+            )
         }
         return joinedFrameText(observations, index: index, imageHeight: imageHeight, profile: profile)
     }
@@ -470,14 +486,15 @@ public actor OCRProcessor: VideoOCRProcessing {
         _ observations: [OCRTextObservation],
         index: Int,
         imageHeight: Double,
-        profile: OCRProfile
+        profile: OCRProfile,
+        textDirection: OCRCuePosition.TextDirection
     ) -> [OCRFrameText] {
         let filtered = filteredObservations(observations, imageHeight: imageHeight, profile: profile)
         return filtered.map { obs in
             OCRFrameText(
                 index: index,
                 text: displayText(for: obs, profile: profile),
-                position: OCRCuePosition.normalizedCenter(for: [obs]),
+                position: OCRCuePosition.normalizedAnchor(for: [obs], textDirection: textDirection),
                 fontHeight: OCRCuePosition.normalizedFontHeight(for: obs)
             )
         }
