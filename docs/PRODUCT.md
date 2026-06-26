@@ -16,7 +16,7 @@ KShowSub generates ASS subtitles from a video by combining speech transcription 
 - Positioned OCR is kept above the bottom dialogue region when it overlaps a dialogue cue in
   time, and simultaneous bottom-region OCR cues are assigned vertical lanes to reduce collisions
   with each other and with speech subtitles.
-- When `--post-process` is enabled, an LLM provider receives batched dialogue and on-screen text cues with overlap context, then decides what should become the final bottom-centered subtitle track. Dialogue may be preserved, lightly rewritten, merged, or dropped; on-screen text may be preserved, rewritten, or distilled, and is rendered in parentheses.
+- When `--post-process` is enabled, an LLM provider receives batched dialogue and on-screen text cues with overlap context, then decides what should become the final bottom-centered subtitle track. Dialogue and OCR are treated as imperfect signals that can disambiguate each other. Dialogue may be preserved, lightly rewritten, merged, or dropped; on-screen text may be preserved, rewritten, or distilled, and is rendered in parentheses.
 - Output format is Advanced SubStation Alpha (`.ass`).
 - `PlayResX` and `PlayResY` are injected when absent so margins render predictably. Both default
   and positioned OCR modes keep the historical 1920x1080 script resolution so dialogue subtitle
@@ -32,7 +32,7 @@ Translation is optional. Providers must preserve cue timing and metadata. Multi-
 
 ## Post-Processing Behavior
 
-Post-processing is optional and runs before translation. Providers receive ordered batches of timestamped cues plus context that identifies dialogue, on-screen text, unknown cues, and temporal overlaps. They distill those inputs into a single readable subtitle track with bottom-dialogue styling. Dialogue is plain subtitle text. On-screen text is included only when useful and must be parenthesized, whether preserved verbatim, rewritten, or distilled from multiple cues. Apple Intelligence uses small ordered cue windows to stay within its 4k context limit. The built-in providers are Apple Intelligence (`apple-intelligence`) and OpenAI-compatible chat completions (`openai`), using the existing `--openai-model`, `--openai-base-url`, and `--openai-auth` options for OpenAI-compatible configuration.
+Post-processing is optional and runs before translation. Providers receive ordered batches of timestamped cues plus context that identifies dialogue, on-screen text, unknown cues, and temporal overlaps. They distill those inputs into a single readable subtitle track with bottom-dialogue styling. Dialogue is plain subtitle text. On-screen text is included only when useful and must be parenthesized, whether preserved verbatim, rewritten, or distilled from multiple cues. Providers should use overlapping dialogue and on-screen text to repair or disambiguate likely speech transcription and OCR errors instead of blindly trusting either source. Apple Intelligence uses small ordered cue windows to stay within its 4k context limit. The built-in providers are Apple Intelligence (`apple-intelligence`) and OpenAI-compatible chat completions (`openai`), using the existing `--openai-model`, `--openai-base-url`, and `--openai-auth` options for OpenAI-compatible configuration.
 
 ## Default Quality Bar
 

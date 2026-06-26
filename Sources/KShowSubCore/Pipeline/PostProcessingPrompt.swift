@@ -24,6 +24,7 @@ enum PostProcessingPrompt {
         Return one unified bottom subtitle track. This is cleanup, not summarization.
         Inputs include context that identifies dialogue cues and on-screen text cues.
         Decide what the final viewer subtitle track should contain from both dialogue and on-screen text.
+        Use dialogue and on-screen text to disambiguate each other because either source can contain recognition errors.
         Dialogue may be preserved, lightly rewritten, merged, or dropped when it is redundant, non-meaningful, or not useful as a final subtitle.
         Keep text short: one line preferred, two lines maximum.
         On-screen text is not dialogue; preserve, rewrite, or distill useful on-screen context only in parentheses, e.g. "(caption: ...)" or "(sign: ...)".
@@ -44,6 +45,14 @@ enum PostProcessingPrompt {
         The job is to discern what should become the final subtitles from both dialogue and on-screen text.
         This is editorial subtitle distillation, not scene summarization.
         Output should remain dense enough to follow the scene moment by moment, but it does not need to preserve every input cue.
+
+        Cross-source disambiguation:
+        Treat dialogue transcription and on-screen OCR as two imperfect signals from the same scene.
+        Use overlapping dialogue and on-screen text to correct or disambiguate likely recognition errors in either source.
+        Do not blindly trust dialogue over on-screen text, or on-screen text over dialogue.
+        When the two sources conflict, prefer the reading that best fits timing, surrounding context, repeated wording, and Korean-show subtitle conventions.
+        If an OCR cue appears garbled but dialogue clarifies the intent, rewrite or drop the OCR cue rather than preserving the error.
+        If dialogue transcription appears garbled but matching on-screen text clarifies the line or context, lightly repair the dialogue.
 
         Dialogue:
         Dialogue is the main subtitle text and must not be wrapped in parentheses.

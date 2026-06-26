@@ -529,6 +529,12 @@ func testPostProcessingPromptIncludesKoreanShowGuidance() throws {
     try expect(prompt.contains("not scene summarization"), "Expected anti-summarization guidance")
     try expect(prompt.contains("discern what should become the final subtitles"), "Expected final-subtitle selection guidance")
     try expect(
+        prompt.contains("two imperfect signals"),
+        "Expected dialogue/OCR cross-source disambiguation guidance")
+    try expect(
+        prompt.contains("correct or disambiguate likely recognition errors"),
+        "Expected recognition error repair guidance")
+    try expect(
         prompt.contains("preserve the on-screen text, rewrite it for readability, or distill"),
         "Expected on-screen text preserve/rewrite/distill guidance")
     try expect(
